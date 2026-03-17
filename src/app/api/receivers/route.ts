@@ -5,8 +5,9 @@
  * - Owner can create receiver
  * - Owner can list receivers
  *
- * No invite logic yet.
- * No UI yet.
+ * Updated:
+ * - identificationNo is now required
+ * - duplicate check is based on ownerId + identificationNo
  */
 
 import { prisma } from "@/lib/prisma";
@@ -43,6 +44,7 @@ export async function GET() {
         email: true,
         phone: true,
         address: true,
+        identificationNo: true,
         createdAt: true,
       },
     });
@@ -79,26 +81,30 @@ export async function POST(req: Request) {
     const email = String(body.email ?? "").trim().toLowerCase();
     const phone = String(body.phone ?? "").trim();
     const address = String(body.address ?? "").trim();
+    const identificationNo = String(body.identificationNo ?? "").trim();
 
     // 4) Validate required fields
-    if (!fullName || !email || !phone || !address) {
+    if (!fullName || !email || !phone || !address || !identificationNo) {
       return Response.json(
-        { error: "fullName, email, phone, address are required." },
+        {
+          error:
+            "fullName, email, phone, address, identificationNo are required.",
+        },
         { status: 400 }
       );
     }
 
-    // 5) Prevent duplicate receiver under same owner
+    // 5) Prevent duplicate receiver under same owner by identification number
     const existing = await prisma.receiver.findFirst({
       where: {
         ownerId: user.id,
-        email,
+        identificationNo,
       },
     });
 
     if (existing) {
       return Response.json(
-        { error: "Receiver with this email already exists." },
+        { error: "Receiver with this identification number already exists." },
         { status: 400 }
       );
     }
@@ -111,6 +117,7 @@ export async function POST(req: Request) {
         email,
         phone,
         address,
+        identificationNo,
       },
       select: {
         id: true,
@@ -118,6 +125,7 @@ export async function POST(req: Request) {
         email: true,
         phone: true,
         address: true,
+        identificationNo: true,
         createdAt: true,
       },
     });
