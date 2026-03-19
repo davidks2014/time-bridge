@@ -94,6 +94,10 @@ export async function POST(req: Request) {
           {
             folder: "time-bridge/verification",
             resource_type: "image",
+
+            // Optimization: shrink very large images before storing
+            transformation: [{ width: 1000, crop: "limit" }],
+
             public_id: `${identificationNo}_${side}_${Date.now()}_${safeName}`,
             overwrite: false,
           },
