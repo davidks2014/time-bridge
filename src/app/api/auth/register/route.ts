@@ -1,8 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
-import path from "path";
-import { promises as fs } from "fs";
 import crypto from "crypto";
+import cloudinary from "@/lib/cloudinary";
 
 /**
  * API: POST /api/auth/register
@@ -10,15 +9,15 @@ import crypto from "crypto";
  * Purpose:
  * - Register a new user using email + password
  * - Capture mandatory profile fields
- * - Upload verification images (NRIC / driving license)
+ * - Upload verification images (NRIC / driving license) to Cloudinary
  * - Set verificationStatus = PENDING (admin will approve later)
  *
  * Request type:
- * - multipart/form-data (because we upload files)
+ * - multipart/form-data
  *
  * Form fields expected:
  * - email, password, name, phoneNumber, identificationNo, address
- * - idFront (File)  [required for MVP]
+ * - idFront (File)  [required]
  * - idBack  (File)  [optional]
  */
 export async function POST(req: Request) {
@@ -33,69 +32,104 @@ export async function POST(req: Request) {
     const identificationNo = String(form.get("identificationNo") ?? "").trim();
     const address = String(form.get("address") ?? "").trim();
 
-    // 2) Read files
+    // 2) Read uploaded files
     const idFront = form.get("idFront");
     const idBack = form.get("idBack");
 
-    // 3) Validate required fields
+    // 3) Validate required text fields
     if (!email || !password || !name || !phoneNumber || !identificationNo || !address) {
       return Response.json({ error: "All fields are required." }, { status: 400 });
     }
 
-    // For MVP: require at least 1 verification image
+    // 4) Require at least front verification image
     if (!(idFront instanceof File)) {
-      return Response.json({ error: "Verification image (front) is required." }, { status: 400 });
+      return Response.json(
+        { error: "Verification image (front) is required." },
+        { status: 400 }
+      );
     }
 
-    // 4) Prevent duplicate email
-    const exists = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    // 5) Prevent duplicate email
+    const exists = await prisma.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+
     if (exists) {
       return Response.json({ error: "Email already registered." }, { status: 409 });
     }
 
-    // 5) Hash password
+    // 6) Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // 6) Save files to /public/uploads/verification
-    async function saveUpload(file: File): Promise<string> {
-      // Basic file type check (MVP)
+    /**
+     * Upload one image file to Cloudinary
+     *
+     * Why this is needed:
+     * - local filesystem upload is not reliable on Vercel
+     * - Cloudinary stores the image externally and returns a URL
+     */
+    async function uploadToCloudinary(file: File, side: "front" | "back"): Promise<string> {
+      // Basic allowed image types
       const allowed = ["image/jpeg", "image/png", "image/webp"];
       if (!allowed.includes(file.type)) {
         throw new Error("Only JPG/PNG/WebP images are allowed.");
       }
 
-      // Optional size limit (MVP) ~ 5MB
+      // Max 5MB
       const maxBytes = 5 * 1024 * 1024;
       if (file.size > maxBytes) {
         throw new Error("File too large. Max 5MB.");
       }
 
+      // Convert browser File -> Node Buffer
       const bytes = Buffer.from(await file.arrayBuffer());
-      const ext =
-        file.type === "image/png" ? "png" :
-        file.type === "image/webp" ? "webp" : "jpg";
 
-      const safeName = crypto.randomBytes(16).toString("hex");
-      const filename = `${Date.now()}_${safeName}.${ext}`;
+      // Small random suffix so public_id stays unique
+      const safeName = crypto.randomBytes(8).toString("hex");
 
-      const uploadDir = path.join(process.cwd(), "public", "uploads", "verification");
-      await fs.mkdir(uploadDir, { recursive: true });
+      // Upload using Cloudinary upload_stream
+      return await new Promise<string>((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: "time-bridge/verification",
+            resource_type: "image",
 
-      const fullPath = path.join(uploadDir, filename);
-      await fs.writeFile(fullPath, bytes);
+            // Optimization: shrink very large images before storing
+            transformation: [{ width: 1000, crop: "limit" }],
 
-      // Public URL that browser can load
-      return `/uploads/verification/${filename}`;
+            public_id: `${identificationNo}_${side}_${Date.now()}_${safeName}`,
+            overwrite: false,
+          },
+          (error, result) => {
+            if (error) {
+              reject(error);
+              return;
+            }
+
+            if (!result?.secure_url) {
+              reject(new Error("Cloudinary upload failed."));
+              return;
+            }
+
+            resolve(result.secure_url);
+          }
+        );
+
+        stream.end(bytes);
+      });
     }
 
-    const verificationDocFrontUrl = await saveUpload(idFront);
+    // 7) Upload required front image
+    const verificationDocFrontUrl = await uploadToCloudinary(idFront, "front");
 
+    // 8) Upload optional back image
     let verificationDocBackUrl: string | null = null;
     if (idBack instanceof File && idBack.size > 0) {
-      verificationDocBackUrl = await saveUpload(idBack);
+      verificationDocBackUrl = await uploadToCloudinary(idBack, "back");
     }
 
-    // 7) Create user in DB (PENDING by default in schema)
+    // 9) Create user in DB
     const user = await prisma.user.create({
       data: {
         email,
@@ -104,14 +138,17 @@ export async function POST(req: Request) {
         phoneNumber,
         identificationNo,
         address,
-
         verificationDocFrontUrl,
-        verificationDocBackUrl: verificationDocBackUrl ?? null,
+        verificationDocBackUrl,
 
-        // verificationStatus default is PENDING in your schema
-        // role default USER in your schema
+        // verificationStatus default = PENDING in schema
+        // role default = USER in schema
       },
-      select: { id: true, email: true, verificationStatus: true },
+      select: {
+        id: true,
+        email: true,
+        verificationStatus: true,
+      },
     });
 
     return Response.json(
@@ -124,9 +161,14 @@ export async function POST(req: Request) {
   } catch (err: any) {
     console.error("Register error:", err);
 
-    // Friendly error messages for file validation
     const msg = String(err?.message ?? "");
-    if (msg.includes("allowed") || msg.includes("Max 5MB")) {
+
+    // Friendly validation messages
+    if (
+      msg.includes("Only JPG/PNG/WebP") ||
+      msg.includes("Max 5MB") ||
+      msg.includes("Cloudinary upload failed")
+    ) {
       return Response.json({ error: msg }, { status: 400 });
     }
 
