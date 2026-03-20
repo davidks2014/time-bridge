@@ -44,8 +44,10 @@ export default function DashboardPage() {
   const [collectionTitle, setCollectionTitle] = useState("");
   const [itemTitle, setItemTitle] = useState("");
   const [itemContent, setItemContent] = useState("");
-  const [releaseDate, setReleaseDate] = useState("");
+
   const [releaseMode, setReleaseMode] = useState<"LATER" | "NOW">("LATER");
+  const [releaseDateOnly, setReleaseDateOnly] = useState("");
+  const [releaseTimeOnly, setReleaseTimeOnly] = useState("");
 
   const [receiverName, setReceiverName] = useState("");
   const [receiverEmail, setReceiverEmail] = useState("");
@@ -115,6 +117,22 @@ export default function DashboardPage() {
     setMismatchReceiver(null);
   }
 
+  function resetReleaseInputs() {
+    setReleaseDateOnly("");
+    setReleaseTimeOnly("");
+  }
+
+  function buildReleaseDateTime(): string | null {
+    const datePart = releaseDateOnly.trim();
+    const timePart = releaseTimeOnly.trim();
+
+    if (!datePart || !timePart) return null;
+
+    // This creates a stable ISO-like local datetime string:
+    // YYYY-MM-DDTHH:mm
+    return `${datePart}T${timePart}`;
+  }
+
   async function confirmProofOfLife() {
     setError("");
     setInfo("");
@@ -156,7 +174,9 @@ export default function DashboardPage() {
     if (!receiverPhone.trim()) return setError("Receiver phone is required.");
     if (!receiverAddress.trim()) return setError("Receiver address is required.");
 
-    if (releaseMode === "NOW" && !releaseDate.trim()) {
+    const normalizedReleaseDateTime = buildReleaseDateTime();
+
+    if (releaseMode === "NOW" && !normalizedReleaseDateTime) {
       return setError("Please choose a release date and time, or select Set Date Later.");
     }
 
@@ -170,7 +190,7 @@ export default function DashboardPage() {
           collectionTitle,
           itemTitle,
           itemContent,
-          releaseDate: releaseMode === "NOW" && releaseDate.trim() ? releaseDate.trim() : null,
+          releaseDate: releaseMode === "NOW" ? normalizedReleaseDateTime : null,
           newReceiver: {
             fullName: receiverName.trim(),
             email: receiverEmail.trim(),
@@ -200,8 +220,8 @@ export default function DashboardPage() {
       setCollectionTitle("");
       setItemTitle("");
       setItemContent("");
-      setReleaseDate("");
       setReleaseMode("LATER");
+      resetReleaseInputs();
 
       setReceiverName("");
       setReceiverEmail("");
@@ -346,7 +366,8 @@ export default function DashboardPage() {
                   checked={releaseMode === "LATER"}
                   onChange={() => {
                     setReleaseMode("LATER");
-                    setReleaseDate("");
+                    resetReleaseInputs();
+                    setError("");
                   }}
                 />
                 Set Date Later
@@ -357,18 +378,36 @@ export default function DashboardPage() {
                   type="radio"
                   name="releaseMode"
                   checked={releaseMode === "NOW"}
-                  onChange={() => setReleaseMode("NOW")}
+                  onChange={() => {
+                    setReleaseMode("NOW");
+                    setError("");
+                  }}
                 />
                 Set Release Date Now
               </label>
             </div>
 
             {releaseMode === "NOW" && (
-              <input
-                type="datetime-local"
-                value={releaseDate}
-                onChange={(e) => setReleaseDate(e.target.value)}
-              />
+              <div style={{ display: "grid", gap: 10 }}>
+                <input
+                  type="date"
+                  value={releaseDateOnly}
+                  onChange={(e) => {
+                    setReleaseDateOnly(e.target.value);
+                    setError("");
+                  }}
+                />
+
+                <input
+                  type="time"
+                  value={releaseTimeOnly}
+                  step={60}
+                  onChange={(e) => {
+                    setReleaseTimeOnly(e.target.value);
+                    setError("");
+                  }}
+                />
+              </div>
             )}
 
             <div style={{ color: "#666", fontSize: 12 }}>

@@ -5,15 +5,20 @@ export const dynamic = "force-dynamic";
 
 /**
  * Auth for:
- * - local/manual testing via Thunder Client
- * - future scheduler calls using the same bearer secret
+ * - local/manual testing via Thunder Client using Bearer CRON_SECRET
+ * - Vercel Cron using x-vercel-cron header
  */
 function isAuthorized(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
 
   const authHeader = req.headers.get("authorization")?.trim();
-  return authHeader === `Bearer ${secret}`;
+  const vercelCronHeader = req.headers.get("x-vercel-cron");
+
+  return (
+    authHeader === `Bearer ${secret}` ||
+    vercelCronHeader === "1"
+  );
 }
 
 export async function POST(req: Request) {
