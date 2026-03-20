@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/jobs/run-proof-check",
-      "schedule": "0 1 * * *"
+      "schedule": "*/10 * * * *"
     },
     {
       "path": "/api/jobs/run-release-engine",
