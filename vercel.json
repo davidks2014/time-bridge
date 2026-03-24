@@ -3,11 +3,11 @@
   "crons": [
     {
       "path": "/api/jobs/run-proof-check",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 1 * * *"
     },
     {
       "path": "/api/jobs/run-release-engine",
-      "schedule": "*/10 * * * *"
+      "schedule": "5 1 * * *"
     }
   ]
 }
