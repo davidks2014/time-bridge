@@ -5,7 +5,7 @@
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, AttachmentType } from "@prisma/client";
 import { parseSingaporeDateTimeInput } from "@/lib/sg-time";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +30,55 @@ function parseOptionalReleaseDate(raw: unknown): Date | null {
   }
 }
 
+function normalizeAttachmentType(raw: unknown): AttachmentType {
+  const value = String(raw ?? "").trim().toUpperCase();
+
+  if (value === "IMAGE") return "IMAGE";
+  if (value === "VIDEO") return "VIDEO";
+
+  throw new Error("INVALID_ATTACHMENT_TYPE");
+}
+
+type IncomingAttachment = {
+  type: AttachmentType;
+  mediaUrl: string;
+  mediaPublicId: string;
+  mediaFileName: string | null;
+  mediaMimeType: string | null;
+};
+
+function parseAttachments(raw: unknown): IncomingAttachment[] {
+  if (raw == null) return [];
+
+  if (!Array.isArray(raw)) {
+    throw new Error("INVALID_ATTACHMENTS");
+  }
+
+  return raw.map((item) => {
+    const type = normalizeAttachmentType((item as any)?.type);
+    const mediaUrl = String((item as any)?.mediaUrl ?? "").trim();
+    const mediaPublicId = String((item as any)?.mediaPublicId ?? "").trim();
+    const mediaFileName = String((item as any)?.mediaFileName ?? "").trim() || null;
+    const mediaMimeType = String((item as any)?.mediaMimeType ?? "").trim() || null;
+
+    if (!mediaUrl) {
+      throw new Error("ATTACHMENT_MEDIA_URL_REQUIRED");
+    }
+
+    if (!mediaPublicId) {
+      throw new Error("ATTACHMENT_MEDIA_PUBLIC_ID_REQUIRED");
+    }
+
+    return {
+      type,
+      mediaUrl,
+      mediaPublicId,
+      mediaFileName,
+      mediaMimeType,
+    };
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -52,6 +101,43 @@ export async function POST(req: Request) {
     const itemTitle = String(body.itemTitle ?? "").trim();
     const itemContent = String(body.itemContent ?? "").trim();
 
+    let attachments: IncomingAttachment[] = [];
+    try {
+      attachments = parseAttachments(body.attachments);
+    } catch (e) {
+      const msg = (e as Error).message;
+
+      if (msg === "INVALID_ATTACHMENTS") {
+        return Response.json(
+          { error: "attachments must be an array." },
+          { status: 400 }
+        );
+      }
+
+      if (msg === "INVALID_ATTACHMENT_TYPE") {
+        return Response.json(
+          { error: "Attachment type must be IMAGE or VIDEO." },
+          { status: 400 }
+        );
+      }
+
+      if (msg === "ATTACHMENT_MEDIA_URL_REQUIRED") {
+        return Response.json(
+          { error: "Each attachment requires mediaUrl." },
+          { status: 400 }
+        );
+      }
+
+      if (msg === "ATTACHMENT_MEDIA_PUBLIC_ID_REQUIRED") {
+        return Response.json(
+          { error: "Each attachment requires mediaPublicId." },
+          { status: 400 }
+        );
+      }
+
+      throw e;
+    }
+
     const newReceiver = body.newReceiver ?? {};
     const receiverFullName = String(newReceiver.fullName ?? "").trim();
     const receiverEmail = normalizeEmail(newReceiver.email ?? "");
@@ -62,25 +148,34 @@ export async function POST(req: Request) {
     if (!collectionTitle) {
       return Response.json({ error: "collectionTitle is required." }, { status: 400 });
     }
+
     if (!itemTitle) {
       return Response.json({ error: "itemTitle is required." }, { status: 400 });
     }
+
     if (!itemContent) {
-      return Response.json({ error: "itemContent is required." }, { status: 400 });
+      return Response.json(
+        { error: "itemContent is required. Message text cannot be empty." },
+        { status: 400 }
+      );
     }
 
     if (!receiverFullName) {
       return Response.json({ error: "Receiver fullName is required." }, { status: 400 });
     }
+
     if (!receiverEmail) {
       return Response.json({ error: "Receiver email is required." }, { status: 400 });
     }
+
     if (!receiverPhone) {
       return Response.json({ error: "Receiver phone is required." }, { status: 400 });
     }
+
     if (!receiverAddress) {
       return Response.json({ error: "Receiver address is required." }, { status: 400 });
     }
+
     if (!receiverIdNo) {
       return Response.json({ error: "Receiver identificationNo is required." }, { status: 400 });
     }
@@ -171,7 +266,6 @@ export async function POST(req: Request) {
         data: {
           ownerId: me.id,
           collectionId: memory.id,
-          type: "TEXT",
           title: itemTitle,
           content: itemContent,
           releaseDate,
@@ -179,7 +273,25 @@ export async function POST(req: Request) {
         select: { id: true, status: true },
       });
 
-      return { memoryId: memory.id, itemId: item.id, itemStatus: item.status };
+      if (attachments.length > 0) {
+        await tx.memoryAttachment.createMany({
+          data: attachments.map((attachment) => ({
+            itemId: item.id,
+            type: attachment.type,
+            mediaUrl: attachment.mediaUrl,
+            mediaPublicId: attachment.mediaPublicId,
+            mediaFileName: attachment.mediaFileName,
+            mediaMimeType: attachment.mediaMimeType,
+          })),
+        });
+      }
+
+      return {
+        memoryId: memory.id,
+        itemId: item.id,
+        itemStatus: item.status,
+        attachmentCount: attachments.length,
+      };
     });
 
     return Response.json(
@@ -188,6 +300,7 @@ export async function POST(req: Request) {
         memoryId: result.memoryId,
         itemId: result.itemId,
         itemStatus: result.itemStatus,
+        attachmentCount: result.attachmentCount,
       },
       { status: 201 }
     );

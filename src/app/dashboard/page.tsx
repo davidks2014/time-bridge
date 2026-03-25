@@ -1,7 +1,7 @@
 // src/app/dashboard/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { formatSingaporeDateTime } from "@/lib/sg-time";
@@ -29,6 +29,16 @@ type DashboardSummaryResponse = {
   lastConfirmedAt: string | null;
 };
 
+type AttachmentType = "IMAGE" | "VIDEO";
+
+type UploadedAttachment = {
+  type: AttachmentType;
+  mediaUrl: string;
+  mediaPublicId: string;
+  mediaFileName: string | null;
+  mediaMimeType: string | null;
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const { status, data: session } = useSession();
@@ -44,6 +54,9 @@ export default function DashboardPage() {
   const [collectionTitle, setCollectionTitle] = useState("");
   const [itemTitle, setItemTitle] = useState("");
   const [itemContent, setItemContent] = useState("");
+
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
 
   const [releaseMode, setReleaseMode] = useState<"LATER" | "NOW">("LATER");
   const [releaseDateOnly, setReleaseDateOnly] = useState("");
@@ -122,15 +135,47 @@ export default function DashboardPage() {
     setReleaseTimeOnly("");
   }
 
+  function resetAttachmentInputs() {
+    setSelectedFiles([]);
+  }
+
+  function resetMemoryForm() {
+    setCollectionTitle("");
+    setItemTitle("");
+    setItemContent("");
+    resetAttachmentInputs();
+
+    setReleaseMode("LATER");
+    resetReleaseInputs();
+
+    setReceiverName("");
+    setReceiverEmail("");
+    setReceiverPhone("");
+    setReceiverAddress("");
+    setReceiverIdNo("");
+
+    setError("");
+    setInfo("");
+    clearMismatch();
+  }
+
   function buildReleaseDateTime(): string | null {
     const datePart = releaseDateOnly.trim();
     const timePart = releaseTimeOnly.trim();
 
     if (!datePart || !timePart) return null;
 
-    // This creates a stable ISO-like local datetime string:
-    // YYYY-MM-DDTHH:mm
     return `${datePart}T${timePart}`;
+  }
+
+  const selectedFileNames = useMemo(() => {
+    return selectedFiles.map((file) => file.name);
+  }, [selectedFiles]);
+
+  function inferAttachmentType(file: File): AttachmentType {
+    if (file.type.startsWith("image/")) return "IMAGE";
+    if (file.type.startsWith("video/")) return "VIDEO";
+    throw new Error(`Unsupported file type: ${file.name}`);
   }
 
   async function confirmProofOfLife() {
@@ -159,6 +204,52 @@ export default function DashboardPage() {
     }
   }
 
+  async function uploadOneAttachment(file: File): Promise<UploadedAttachment> {
+    const attachmentType = inferAttachmentType(file);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("itemType", attachmentType);
+
+    const res = await fetch("/api/media/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      throw new Error(json?.error ?? `Failed to upload file: ${file.name}`);
+    }
+
+    return {
+      type: attachmentType,
+      mediaUrl: String(json.mediaUrl),
+      mediaPublicId: String(json.mediaPublicId),
+      mediaFileName: json.mediaFileName ? String(json.mediaFileName) : file.name,
+      mediaMimeType: json.mediaMimeType ? String(json.mediaMimeType) : file.type,
+    };
+  }
+
+  async function uploadAllAttachments(): Promise<UploadedAttachment[]> {
+    if (selectedFiles.length === 0) return [];
+
+    setUploadingMedia(true);
+
+    try {
+      const uploaded: UploadedAttachment[] = [];
+
+      for (const file of selectedFiles) {
+        const result = await uploadOneAttachment(file);
+        uploaded.push(result);
+      }
+
+      return uploaded;
+    } finally {
+      setUploadingMedia(false);
+    }
+  }
+
   async function createMemory() {
     setError("");
     setInfo("");
@@ -183,13 +274,16 @@ export default function DashboardPage() {
     setLoading(true);
 
     try {
+      const attachments = await uploadAllAttachments();
+
       const res = await fetch("/api/memory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           collectionTitle,
           itemTitle,
-          itemContent,
+          itemContent: itemContent.trim(),
+          attachments,
           releaseDate: releaseMode === "NOW" ? normalizedReleaseDateTime : null,
           newReceiver: {
             fullName: receiverName.trim(),
@@ -216,26 +310,15 @@ export default function DashboardPage() {
       }
 
       setInfo("Memory created successfully. Redirecting to Memory Sent...");
-
-      setCollectionTitle("");
-      setItemTitle("");
-      setItemContent("");
-      setReleaseMode("LATER");
-      resetReleaseInputs();
-
-      setReceiverName("");
-      setReceiverEmail("");
-      setReceiverPhone("");
-      setReceiverAddress("");
-      setReceiverIdNo("");
+      resetMemoryForm();
 
       await loadSummary();
 
       setTimeout(() => {
         router.push("/memory-sent");
       }, 600);
-    } catch {
-      setError("Network error.");
+    } catch (e) {
+      setError((e as Error)?.message || "Network error.");
     } finally {
       setLoading(false);
     }
@@ -250,6 +333,10 @@ export default function DashboardPage() {
   function cancelMismatch() {
     clearMismatch();
     setInfo("");
+  }
+
+  function removeSelectedFile(indexToRemove: number) {
+    setSelectedFiles((prev) => prev.filter((_, index) => index !== indexToRemove));
   }
 
   if (status === "loading") {
@@ -343,18 +430,104 @@ export default function DashboardPage() {
               onChange={(e) => setCollectionTitle(e.target.value)}
             />
 
-            <div style={{ fontWeight: 800, marginTop: 8 }}>Message (TEXT)</div>
+            <div style={{ fontWeight: 800, marginTop: 8 }}>Message Title</div>
             <input
               placeholder="Message title *"
               value={itemTitle}
               onChange={(e) => setItemTitle(e.target.value)}
             />
+
+            <div style={{ fontWeight: 800, marginTop: 8 }}>Text Message</div>
             <textarea
-              placeholder="Message content *"
+              placeholder="Write your message here *"
               value={itemContent}
               onChange={(e) => setItemContent(e.target.value)}
-              rows={4}
+              rows={5}
             />
+
+            <div style={{ fontWeight: 800, marginTop: 8 }}>Attachments (Optional)</div>
+
+            <input
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                setSelectedFiles(files);
+                setError("");
+                setInfo("");
+              }}
+            />
+
+            {selectedFileNames.length > 0 && (
+              <div
+                style={{
+                  border: "1px solid #eee",
+                  borderRadius: 10,
+                  padding: 10,
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
+                <div style={{ fontWeight: 800 }}>Selected files</div>
+
+                {selectedFiles.map((file, index) => {
+                  const isImage = file.type.startsWith("image/");
+                  const isVideo = file.type.startsWith("video/");
+
+                  return (
+                    <div
+                      key={`${file.name}-${index}`}
+                      style={{
+                        border: "1px solid #f0f0f0",
+                        borderRadius: 8,
+                        padding: 10,
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      <div style={{ fontSize: 13 }}>
+                        <b>{file.name}</b>
+                      </div>
+
+                      <div style={{ color: "#666", fontSize: 12 }}>
+                        Type: {isImage ? "IMAGE" : isVideo ? "VIDEO" : "UNKNOWN"} | Size:{" "}
+                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                      </div>
+
+                      {isImage && (
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={file.name}
+                          style={{
+                            maxWidth: 240,
+                            maxHeight: 180,
+                            borderRadius: 8,
+                            border: "1px solid #ddd",
+                          }}
+                        />
+                      )}
+
+                      {isVideo && (
+                        <div style={{ color: "#666", fontSize: 12 }}>
+                          Video selected and will upload to Cloudinary when you create the memory.
+                        </div>
+                      )}
+
+                      <div>
+                        <button type="button" onClick={() => removeSelectedFile(index)}>
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ color: "#666", fontSize: 12 }}>
+              You can attach images and videos together with your text message.
+            </div>
 
             <div style={{ fontWeight: 800, marginTop: 8 }}>Release Time (Singapore Time)</div>
 
@@ -505,8 +678,8 @@ export default function DashboardPage() {
             {error && <div style={{ color: "red" }}>{error}</div>}
             {info && <div style={{ color: "green" }}>{info}</div>}
 
-            <button onClick={createMemory} disabled={loading}>
-              {loading ? "Creating..." : "Create Memory"}
+            <button onClick={createMemory} disabled={loading || uploadingMedia}>
+              {loading ? "Creating..." : uploadingMedia ? "Uploading attachments..." : "Create Memory"}
             </button>
           </div>
         </div>

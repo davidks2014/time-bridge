@@ -5,13 +5,28 @@ import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { formatSingaporeDateTime } from "@/lib/sg-time";
 
+type ApiAttachment = {
+  id: string;
+  type: "IMAGE" | "VIDEO";
+  mediaUrl: string;
+  mediaPublicId: string;
+  mediaFileName: string | null;
+  mediaMimeType: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type ApiItem = {
   id: string;
-  type: "TEXT" | "VIDEO";
   title: string;
+  content: string;
   releaseDate: string | null;
+  releasedAt: string | null;
   status: "DRAFT" | "RELEASED";
   createdAt: string;
+  updatedAt: string;
+  attachments: ApiAttachment[];
+  attachmentCount: number;
 };
 
 type ApiReceiver = {
@@ -21,12 +36,15 @@ type ApiReceiver = {
   phone: string;
   address: string;
   identificationNo: string;
+  linkedUserId: string | null;
 };
 
-type ApiCollection = {
+type ApiMemory = {
   id: string;
   title: string;
+  status: string;
   createdAt: string;
+  updatedAt: string;
   receiver: ApiReceiver;
   items: ApiItem[];
 };
@@ -35,7 +53,7 @@ export default function MemorySentPage() {
   const router = useRouter();
   const { status } = useSession();
 
-  const [collections, setCollections] = useState<ApiCollection[]>([]);
+  const [memories, setMemories] = useState<ApiMemory[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -52,7 +70,8 @@ export default function MemorySentPage() {
         return;
       }
 
-      setCollections(json.collections ?? []);
+      // New API returns { memories: [...] }
+      setMemories(json.memories ?? []);
     } catch {
       setError("Network error.");
     } finally {
@@ -68,7 +87,9 @@ export default function MemorySentPage() {
     if (status === "authenticated") load();
   }, [status]);
 
-  if (status === "loading") return <div style={{ padding: 20 }}>Checking session...</div>;
+  if (status === "loading") {
+    return <div style={{ padding: 20 }}>Checking session...</div>;
+  }
 
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>
@@ -87,10 +108,10 @@ export default function MemorySentPage() {
       {loading && <div style={{ marginTop: 16 }}>Loading...</div>}
 
       <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
-        {collections.length === 0 && !loading ? (
+        {memories.length === 0 && !loading ? (
           <div style={{ color: "#666" }}>No memories created yet.</div>
         ) : (
-          collections.map((m) => {
+          memories.map((m) => {
             const isLocked = m.items.some((it) => it.status === "RELEASED");
 
             return (
@@ -130,9 +151,13 @@ export default function MemorySentPage() {
                         key={i.id}
                         style={{ border: "1px solid #eee", borderRadius: 10, padding: 10 }}
                       >
-                        <div style={{ fontWeight: 800 }}>
-                          {i.title}{" "}
-                          <span style={{ color: "#666", fontWeight: 500 }}>({i.type})</span>
+                        <div style={{ fontWeight: 800 }}>{i.title}</div>
+
+                        <div style={{ marginTop: 6, color: "#555" }}>
+                          Text preview:{" "}
+                          <span style={{ color: "#333" }}>
+                            {i.content.length > 80 ? `${i.content.slice(0, 80)}...` : i.content}
+                          </span>
                         </div>
 
                         <div style={{ marginTop: 6 }}>
@@ -145,6 +170,31 @@ export default function MemorySentPage() {
                         <div style={{ marginTop: 6 }}>
                           Status: {i.status === "RELEASED" ? "Released" : "Scheduled"}
                         </div>
+
+                        <div style={{ marginTop: 6, fontSize: 12, color: "#666" }}>
+                          Attachments: <b>{i.attachmentCount}</b>
+                        </div>
+
+                        {i.attachments.length > 0 && (
+                          <div style={{ marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {i.attachments.map((att) => (
+                              <span
+                                key={att.id}
+                                style={{
+                                  border: "1px solid #ddd",
+                                  borderRadius: 999,
+                                  padding: "4px 8px",
+                                  fontSize: 12,
+                                  color: "#444",
+                                  background: "#fafafa",
+                                }}
+                              >
+                                {att.type}
+                                {att.mediaFileName ? ` • ${att.mediaFileName}` : ""}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))
                   )}

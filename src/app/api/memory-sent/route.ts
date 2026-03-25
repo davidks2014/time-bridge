@@ -1,34 +1,32 @@
-/**
- * API: GET /api/memory-sent
- *
- * Purpose:
- * - Logged-in user (sender) lists all memories they created:
- *   - MemoryCollection (card)
- *   - MemoryItem(s) inside each card
- *   - Receiver information
- *
- * Notes:
- * - MemoryCollection.status REMOVED (Option 1)
- * - Lock state is derived on UI side (if any item RELEASED)
- */
-
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+function normalizeEmail(raw: string): string {
+  return String(raw ?? "").trim().toLowerCase();
+}
+
+/**
+ * API: GET /api/memory-sent
+ *
+ * Purpose:
+ * - Return all memory collections created by the logged-in owner
+ * - Each collection includes its items and each item's attachments
+ */
 export async function GET() {
   try {
-    // 1) Must be logged in
     const session = await getServerSession(authOptions);
+
     if (!session?.user?.email) {
       return Response.json({ error: "Not logged in." }, { status: 401 });
     }
 
-    // 2) Current user
+    const email = normalizeEmail(session.user.email);
+
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email.toLowerCase() },
+      where: { email },
       select: { id: true },
     });
 
@@ -36,11 +34,20 @@ export async function GET() {
       return Response.json({ error: "User not found." }, { status: 404 });
     }
 
-    // 3) Fetch all memories + items + receiver
-    const collections = await prisma.memoryCollection.findMany({
-      where: { ownerId: user.id },
-      orderBy: { createdAt: "desc" },
-      include: {
+    const memories = await prisma.memoryCollection.findMany({
+      where: {
+        ownerId: user.id,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+
         receiver: {
           select: {
             id: true,
@@ -49,23 +56,71 @@ export async function GET() {
             phone: true,
             address: true,
             identificationNo: true,
+            linkedUserId: true,
           },
         },
+
         items: {
-          orderBy: { createdAt: "desc" },
+          orderBy: {
+            createdAt: "asc",
+          },
           select: {
             id: true,
-            type: true,
             title: true,
+            content: true,
             releaseDate: true,
+            releasedAt: true,
             status: true,
             createdAt: true,
+            updatedAt: true,
+
+            attachments: {
+              orderBy: {
+                createdAt: "asc",
+              },
+              select: {
+                id: true,
+                type: true,
+                mediaUrl: true,
+                mediaPublicId: true,
+                mediaFileName: true,
+                mediaMimeType: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
           },
         },
       },
     });
 
-    return Response.json({ collections });
+    const formatted = memories.map((memory) => ({
+      id: memory.id,
+      title: memory.title,
+      status: memory.status,
+      createdAt: memory.createdAt,
+      updatedAt: memory.updatedAt,
+
+      receiver: memory.receiver,
+
+      items: memory.items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        content: item.content,
+        releaseDate: item.releaseDate,
+        releasedAt: item.releasedAt,
+        status: item.status,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+
+        attachments: item.attachments,
+        attachmentCount: item.attachments.length,
+      })),
+    }));
+
+    return Response.json({
+      memories: formatted,
+    });
   } catch (err) {
     console.error("GET /api/memory-sent error:", err);
     return Response.json({ error: "Server error." }, { status: 500 });

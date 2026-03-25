@@ -18,12 +18,12 @@ datasource db {
 // =========================================
 
 /**
- * Memory item type:
- * - TEXT  : written message
- * - VIDEO : video message (store URL in videoUrl for now)
+ * Attachment type:
+ * - IMAGE : image file attached to a message
+ * - VIDEO : video file attached to a message
  */
-enum ItemType {
-  TEXT
+enum AttachmentType {
+  IMAGE
   VIDEO
 }
 
@@ -65,7 +65,7 @@ enum VerificationStatus {
 }
 
 // =========================================
-// NextAuth Models (Required if you use PrismaAdapter)
+// NextAuth Models
 // =========================================
 
 model Account {
@@ -114,7 +114,7 @@ model User {
   // =========================================
   id    String @id @default(cuid())
   email String @unique
-  name  String // mandatory
+  name  String
 
   // =========================================
   // Role / Admin
@@ -122,12 +122,12 @@ model User {
   role UserRole @default(USER)
 
   // =========================================
-  // Authentication (Credentials login)
+  // Authentication
   // =========================================
   passwordHash String
 
   // =========================================
-  // Mandatory Profile Fields (your requirement)
+  // Mandatory Profile Fields
   // =========================================
   phoneNumber      String
   identificationNo String
@@ -159,22 +159,26 @@ model User {
   linkedReceivers Receiver[] @relation("ReceiverLinkedUser")
 
   // =========================================
-  // Identity verification requests (receiver claim)
+  // Identity verification requests
   // =========================================
   verificationRequests IdentityVerificationRequest[] @relation("VerificationRequester")
 
   // =========================================
-  // Manual identity verification (Admin)
+  // Manual identity verification
   // =========================================
   verificationStatus VerificationStatus @default(PENDING)
   verifiedAt         DateTime?
   rejectReason       String?
 
   // =========================================
-  // Verification Documents (uploaded at register)
+  // Verification Documents
   // =========================================
   verificationDocFrontUrl String?
   verificationDocBackUrl  String?
+
+  // Optional: store Cloudinary public IDs too for cleanup
+  verificationDocFrontPublicId String?
+  verificationDocBackPublicId  String?
 
   // =========================================
   // Timestamps
@@ -186,33 +190,32 @@ model User {
 model Receiver {
   id String @id @default(cuid())
 
-  // Owner of this receiver record (the user who created it)
+  // Owner of this receiver record
   ownerId String
   owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
-  // Mandatory receiver details (used for delivery)
+  // Mandatory receiver details
   fullName         String
   email            String
   phone            String
   address          String
-  identificationNo String // 🔥 Mandatory for your validation
+  identificationNo String
 
-  // Invitation (optional legacy fields; you can keep)
+  // Invitation legacy fields
   inviteToken     String?   @unique
   inviteExpiresAt DateTime?
 
-  // After receiver claims & admin approves, link this receiver record to an actual User account
+  // Linked actual receiver account
   linkedUserId String?
   linkedUser   User?   @relation("ReceiverLinkedUser", fields: [linkedUserId], references: [id], onDelete: SetNull)
 
   // Collections that target this receiver
   collections MemoryCollection[]
 
-  // ✅ FIX for your Prisma error:
-  // ReceiverInvite.receiver requires opposite relation here
-  invites ReceiverInvite[] // <-- opposite relation
+  // Invite relation
+  invites ReceiverInvite[]
 
-  // Identity verification requests for this receiver (admin review queue)
+  // Identity verification requests
   verificationRequests IdentityVerificationRequest[]
 
   createdAt DateTime @default(now())
@@ -260,24 +263,21 @@ model MemoryItem {
   ownerId String
   owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
-  // Item type
-  type ItemType
-
-  // Item title
+  // Message title
   title String
 
-  // TEXT fields
-  content String?
+  // Message text content
+  content String
 
-  // VIDEO fields
-  videoUrl String?
-
-  // Optional per-item release date (your logic)
+  // Optional per-item release date
   releaseDate DateTime?
   releasedAt  DateTime?
 
   // Release status
   status MemoryItemStatus @default(DRAFT)
+
+  // Optional attachments (image/video)
+  attachments MemoryAttachment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -285,6 +285,30 @@ model MemoryItem {
   @@index([ownerId])
   @@index([collectionId])
   @@index([releaseDate])
+  @@index([status])
+}
+
+model MemoryAttachment {
+  id String @id @default(cuid())
+
+  // Parent message item
+  itemId String
+  item   MemoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  // Attachment type
+  type AttachmentType
+
+  // Cloudinary / media metadata
+  mediaUrl      String
+  mediaPublicId String
+  mediaFileName String?
+  mediaMimeType String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([itemId])
+  @@index([type])
 }
 
 model ReceiverInvite {
@@ -295,7 +319,7 @@ model ReceiverInvite {
   receiverId String
   receiver   Receiver @relation(fields: [receiverId], references: [id], onDelete: Cascade)
 
-  // Snapshot info at invite generation time (helpful for display)
+  // Snapshot info at invite generation time
   receiverEmail String
   receiverName  String?
 
@@ -310,7 +334,7 @@ model ReceiverInvite {
  * Admin review queue for Scenario A:
  * - Receiver clicks invite link
  * - Enters identificationNo + creates login email/password
- * - Uploads ID photo proof (NRIC / driving license)
+ * - Uploads ID photo proof
  * - Admin reviews and approves
  * - After approve: Receiver.linkedUserId is set
  */
@@ -321,24 +345,28 @@ model IdentityVerificationRequest {
   receiverId String
   receiver   Receiver @relation(fields: [receiverId], references: [id], onDelete: Cascade)
 
-  // Who is requesting (the user account that was created by receiver)
+  // Who is requesting
   requesterUserId String
   requesterUser   User   @relation("VerificationRequester", fields: [requesterUserId], references: [id], onDelete: Cascade)
 
-  // Which invite token was used (optional, but useful for tracing)
+  // Which invite token was used
   inviteTokenUsed String?
 
   // Identification number submitted in the claim form
   identificationNoSubmitted String
 
-  // Uploaded ID images (MVP: store file path/url)
+  // Uploaded ID images
   idImageFrontUrl String
   idImageBackUrl  String?
+
+  // Optional Cloudinary public IDs for cleanup
+  idImageFrontPublicId String?
+  idImageBackPublicId  String?
 
   // Admin review result
   status       VerificationStatus @default(PENDING)
   reviewedAt   DateTime?
-  reviewedBy   String? // store admin userId (string) for simplicity
+  reviewedBy   String?
   rejectReason String?
 
   createdAt DateTime @default(now())

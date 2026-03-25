@@ -3,24 +3,33 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import {
-  formatSingaporeDateTime,
-  toSingaporeDateTimeLocalInput,
-} from "@/lib/sg-time";
+import { formatSingaporeDateTime } from "@/lib/sg-time";
 
 type MemoryItemStatus = "DRAFT" | "RELEASED";
-type ItemType = "TEXT" | "VIDEO";
+type AttachmentType = "IMAGE" | "VIDEO";
+
+type MemoryAttachment = {
+  id: string;
+  type: AttachmentType;
+  mediaUrl: string;
+  mediaPublicId: string;
+  mediaFileName: string | null;
+  mediaMimeType: string | null;
+  createdAt: string;
+  updatedAt?: string;
+};
 
 type MemoryItem = {
   id: string;
-  type: ItemType;
   title: string;
-  content: string | null;
-  videoUrl: string | null;
+  content: string;
   releaseDate: string | null;
+  releasedAt: string | null;
   status: MemoryItemStatus;
   createdAt: string;
   updatedAt: string;
+  attachments?: MemoryAttachment[];
+  attachmentCount?: number;
 };
 
 type Receiver = {
@@ -42,6 +51,81 @@ type Memory = {
   items: MemoryItem[];
 };
 
+function splitDateTimeForInput(isoString: string | null): {
+  dateOnly: string;
+  timeOnly: string;
+} {
+  if (!isoString) {
+    return { dateOnly: "", timeOnly: "" };
+  }
+
+  const d = new Date(isoString);
+
+  const singaporeDate = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  const singaporeTime = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Singapore",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  return {
+    dateOnly: singaporeDate.format(d),
+    timeOnly: singaporeTime.format(d),
+  };
+}
+
+function normalizeMemory(raw: any): Memory {
+  return {
+    id: String(raw?.id ?? ""),
+    title: String(raw?.title ?? ""),
+    status: String(raw?.status ?? ""),
+    createdAt: String(raw?.createdAt ?? ""),
+    updatedAt: String(raw?.updatedAt ?? ""),
+    receiver: {
+      id: String(raw?.receiver?.id ?? ""),
+      fullName: String(raw?.receiver?.fullName ?? ""),
+      email: String(raw?.receiver?.email ?? ""),
+      phone: String(raw?.receiver?.phone ?? ""),
+      address: String(raw?.receiver?.address ?? ""),
+      identificationNo: String(raw?.receiver?.identificationNo ?? ""),
+    },
+    items: Array.isArray(raw?.items)
+      ? raw.items.map((item: any) => ({
+          id: String(item?.id ?? ""),
+          title: String(item?.title ?? ""),
+          content: String(item?.content ?? ""),
+          releaseDate: item?.releaseDate ?? null,
+          releasedAt: item?.releasedAt ?? null,
+          status: (item?.status ?? "DRAFT") as MemoryItemStatus,
+          createdAt: String(item?.createdAt ?? ""),
+          updatedAt: String(item?.updatedAt ?? ""),
+          attachments: Array.isArray(item?.attachments)
+            ? item.attachments.map((att: any) => ({
+                id: String(att?.id ?? ""),
+                type: String(att?.type ?? "IMAGE") as AttachmentType,
+                mediaUrl: String(att?.mediaUrl ?? ""),
+                mediaPublicId: String(att?.mediaPublicId ?? ""),
+                mediaFileName: att?.mediaFileName ? String(att.mediaFileName) : null,
+                mediaMimeType: att?.mediaMimeType ? String(att.mediaMimeType) : null,
+                createdAt: String(att?.createdAt ?? ""),
+                updatedAt: att?.updatedAt ? String(att.updatedAt) : undefined,
+              }))
+            : [],
+          attachmentCount: Array.isArray(item?.attachments)
+            ? item.attachments.length
+            : Number(item?.attachmentCount ?? 0),
+        }))
+      : [],
+  };
+}
+
 export default function MemoryDetailsPage({
   params,
 }: {
@@ -57,8 +141,11 @@ export default function MemoryDetailsPage({
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editContent, setEditContent] = useState("");
-  const [editReleaseDate, setEditReleaseDate] = useState("");
+
   const [editReleaseMode, setEditReleaseMode] = useState<"LATER" | "NOW">("LATER");
+  const [editReleaseDateOnly, setEditReleaseDateOnly] = useState("");
+  const [editReleaseTimeOnly, setEditReleaseTimeOnly] = useState("");
+
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -88,7 +175,7 @@ export default function MemoryDetailsPage({
         return;
       }
 
-      setMemory(json.memory);
+      setMemory(normalizeMemory(json.memory));
     } catch {
       setPageError("Network error.");
     } finally {
@@ -100,6 +187,20 @@ export default function MemoryDetailsPage({
     if (status === "authenticated") loadMemory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
+
+  function resetEditReleaseInputs() {
+    setEditReleaseDateOnly("");
+    setEditReleaseTimeOnly("");
+  }
+
+  function buildEditReleaseDateTime(): string | null {
+    const datePart = editReleaseDateOnly.trim();
+    const timePart = editReleaseTimeOnly.trim();
+
+    if (!datePart || !timePart) return null;
+
+    return `${datePart}T${timePart}`;
+  }
 
   function startEdit(item: MemoryItem) {
     setEditError("");
@@ -114,11 +215,13 @@ export default function MemoryDetailsPage({
     setEditContent(item.content ?? "");
 
     if (item.releaseDate) {
+      const split = splitDateTimeForInput(item.releaseDate);
       setEditReleaseMode("NOW");
-      setEditReleaseDate(toSingaporeDateTimeLocalInput(item.releaseDate));
+      setEditReleaseDateOnly(split.dateOnly);
+      setEditReleaseTimeOnly(split.timeOnly);
     } else {
       setEditReleaseMode("LATER");
-      setEditReleaseDate("");
+      resetEditReleaseInputs();
     }
   }
 
@@ -126,8 +229,8 @@ export default function MemoryDetailsPage({
     setEditingItemId(null);
     setEditTitle("");
     setEditContent("");
-    setEditReleaseDate("");
     setEditReleaseMode("LATER");
+    resetEditReleaseInputs();
     setEditError("");
   }
 
@@ -152,12 +255,14 @@ export default function MemoryDetailsPage({
       return;
     }
 
-    if (item.type === "TEXT" && !editContent.trim()) {
-      setEditError("Content cannot be empty for TEXT item.");
+    if (!editContent.trim()) {
+      setEditError("Content cannot be empty.");
       return;
     }
 
-    if (editReleaseMode === "NOW" && !editReleaseDate.trim()) {
+    const normalizedEditReleaseDateTime = buildEditReleaseDateTime();
+
+    if (editReleaseMode === "NOW" && !normalizedEditReleaseDateTime) {
       setEditError("Please choose a release date and time, or select Set Date Later.");
       return;
     }
@@ -165,21 +270,11 @@ export default function MemoryDetailsPage({
     setSaving(true);
 
     try {
-      const payload: {
-        title: string;
-        content?: string;
-        releaseDate: string | null;
-      } = {
+      const payload = {
         title: editTitle.trim(),
-        releaseDate:
-          editReleaseMode === "NOW" && editReleaseDate.trim()
-            ? editReleaseDate.trim()
-            : null,
+        content: editContent.trim(),
+        releaseDate: editReleaseMode === "NOW" ? normalizedEditReleaseDateTime : null,
       };
-
-      if (item.type === "TEXT") {
-        payload.content = editContent.trim();
-      }
 
       const res = await fetch(`/api/memory-sent/${memory.id}/items/${editingItemId}`, {
         method: "PATCH",
@@ -288,10 +383,18 @@ export default function MemoryDetailsPage({
         <div style={{ marginTop: 8 }}>
           Name: <b>{memory.receiver.fullName}</b>
         </div>
-        <div>Email: <b>{memory.receiver.email}</b></div>
-        <div>Phone: <b>{memory.receiver.phone}</b></div>
-        <div>Address: <b>{memory.receiver.address}</b></div>
-        <div>ID No: <b>{memory.receiver.identificationNo}</b></div>
+        <div>
+          Email: <b>{memory.receiver.email}</b>
+        </div>
+        <div>
+          Phone: <b>{memory.receiver.phone}</b>
+        </div>
+        <div>
+          Address: <b>{memory.receiver.address}</b>
+        </div>
+        <div>
+          ID No: <b>{memory.receiver.identificationNo}</b>
+        </div>
       </div>
 
       <div style={{ marginTop: 12, border: "1px solid #ddd", borderRadius: 12, padding: 14 }}>
@@ -303,6 +406,8 @@ export default function MemoryDetailsPage({
           <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
             {memory.items.map((item) => {
               const isEditing = editingItemId === item.id;
+              const attachments = item.attachments ?? [];
+              const attachmentCount = item.attachmentCount ?? attachments.length;
 
               return (
                 <div
@@ -313,7 +418,11 @@ export default function MemoryDetailsPage({
                     <>
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                         <div style={{ fontWeight: 900 }}>{item.title}</div>
-                        <div style={{ color: "#666" }}>{item.type}</div>
+                        <div style={{ color: "#666" }}>
+                          {attachmentCount > 0
+                            ? `${attachmentCount} attachment${attachmentCount > 1 ? "s" : ""}`
+                            : "Text only"}
+                        </div>
                       </div>
 
                       <div style={{ marginTop: 6, color: "#666" }}>
@@ -329,9 +438,55 @@ export default function MemoryDetailsPage({
                         </b>
                       </div>
 
-                      {item.type === "TEXT" && (
-                        <div style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>
-                          {item.content ?? ""}
+                      <div style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>{item.content}</div>
+
+                      {attachments.length > 0 && (
+                        <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+                          <div style={{ fontWeight: 800 }}>Attachments</div>
+
+                          {attachments.map((att) => (
+                            <div
+                              key={att.id}
+                              style={{
+                                border: "1px solid #f0f0f0",
+                                borderRadius: 10,
+                                padding: 10,
+                              }}
+                            >
+                              <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
+                                <b>{att.type}</b>
+                                {att.mediaFileName ? ` • ${att.mediaFileName}` : ""}
+                              </div>
+
+                              {att.type === "IMAGE" && (
+                                <img
+                                  src={att.mediaUrl}
+                                  alt={att.mediaFileName ?? item.title}
+                                  style={{
+                                    maxWidth: "100%",
+                                    maxHeight: 360,
+                                    borderRadius: 10,
+                                    border: "1px solid #ddd",
+                                  }}
+                                />
+                              )}
+
+                              {att.type === "VIDEO" && (
+                                <video
+                                  controls
+                                  style={{
+                                    width: "100%",
+                                    maxHeight: 420,
+                                    borderRadius: 10,
+                                    border: "1px solid #ddd",
+                                  }}
+                                  src={att.mediaUrl}
+                                >
+                                  Your browser does not support the video tag.
+                                </video>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       )}
 
@@ -351,17 +506,62 @@ export default function MemoryDetailsPage({
                       <div style={{ fontWeight: 900, marginBottom: 8 }}>Edit Item</div>
 
                       <div style={{ display: "grid", gap: 8 }}>
-                        <input
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
+                        <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+
+                        <textarea
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          rows={5}
                         />
 
-                        {item.type === "TEXT" && (
-                          <textarea
-                            value={editContent}
-                            onChange={(e) => setEditContent(e.target.value)}
-                            rows={4}
-                          />
+                        {attachments.length > 0 && (
+                          <div style={{ marginTop: 4, display: "grid", gap: 10 }}>
+                            <div style={{ fontWeight: 800 }}>Current Attachments</div>
+
+                            {attachments.map((att) => (
+                              <div
+                                key={att.id}
+                                style={{
+                                  border: "1px solid #f0f0f0",
+                                  borderRadius: 10,
+                                  padding: 10,
+                                }}
+                              >
+                                <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
+                                  <b>{att.type}</b>
+                                  {att.mediaFileName ? ` • ${att.mediaFileName}` : ""}
+                                </div>
+
+                                {att.type === "IMAGE" && (
+                                  <img
+                                    src={att.mediaUrl}
+                                    alt={att.mediaFileName ?? item.title}
+                                    style={{
+                                      maxWidth: "100%",
+                                      maxHeight: 240,
+                                      borderRadius: 10,
+                                      border: "1px solid #ddd",
+                                    }}
+                                  />
+                                )}
+
+                                {att.type === "VIDEO" && (
+                                  <video
+                                    controls
+                                    style={{
+                                      width: "100%",
+                                      maxHeight: 320,
+                                      borderRadius: 10,
+                                      border: "1px solid #ddd",
+                                    }}
+                                    src={att.mediaUrl}
+                                  >
+                                    Your browser does not support the video tag.
+                                  </video>
+                                )}
+                              </div>
+                            ))}
+                          </div>
                         )}
 
                         <div style={{ fontSize: 12, color: "#666" }}>
@@ -383,7 +583,7 @@ export default function MemoryDetailsPage({
                               checked={editReleaseMode === "LATER"}
                               onChange={() => {
                                 setEditReleaseMode("LATER");
-                                setEditReleaseDate("");
+                                resetEditReleaseInputs();
                               }}
                             />
                             Set Date Later
@@ -401,11 +601,26 @@ export default function MemoryDetailsPage({
                         </div>
 
                         {editReleaseMode === "NOW" && (
-                          <input
-                            type="datetime-local"
-                            value={editReleaseDate}
-                            onChange={(e) => setEditReleaseDate(e.target.value)}
-                          />
+                          <div style={{ display: "grid", gap: 10 }}>
+                            <input
+                              type="date"
+                              value={editReleaseDateOnly}
+                              onChange={(e) => {
+                                setEditReleaseDateOnly(e.target.value);
+                                setEditError("");
+                              }}
+                            />
+
+                            <input
+                              type="time"
+                              value={editReleaseTimeOnly}
+                              step={60}
+                              onChange={(e) => {
+                                setEditReleaseTimeOnly(e.target.value);
+                                setEditError("");
+                              }}
+                            />
+                          </div>
                         )}
 
                         <div style={{ color: "#666", fontSize: 12 }}>

@@ -1,71 +1,105 @@
-/**
- * API: GET /api/memory-received
- *
- * Purpose:
- * - For logged-in user (receiver), list items that have been RELEASED to them.
- *
- * Practical MVP receiver matching:
- * - receiver.linkedUserId == currentUser.id OR receiver.email == currentUser.email
- *
- * Output:
- * - Includes `sender` (owner of the memory card)
- * - Includes `releasedAt` (MVP: use item.updatedAt, because status becomes RELEASED during update)
- */
-
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * API: GET /api/memory-received
+ *
+ * Purpose:
+ * - Return released memory items that belong to receivers linked to the logged-in user
+ * - Uses attachment-based model:
+ *   MemoryItem = text message
+ *   MemoryAttachment[] = image/video attachments
+ */
 export async function GET() {
   try {
-    // 1) Must be logged in
     const session = await getServerSession(authOptions);
+
     if (!session?.user?.email) {
       return Response.json({ error: "Not logged in." }, { status: 401 });
     }
 
-    const email = session.user.email.toLowerCase();
+    const email = String(session.user.email).toLowerCase().trim();
 
-    // 2) Find current user id
-    const user = await prisma.user.findUnique({
+    // 1) Get current logged-in user
+    const me = await prisma.user.findUnique({
       where: { email },
       select: { id: true },
     });
 
-    if (!user) {
+    if (!me) {
       return Response.json({ error: "User not found." }, { status: 404 });
     }
 
-    // 3) Find released items for this receiver
-    const items = await prisma.memoryItem.findMany({
+    // 2) Find receiver records linked to this user
+    const linkedReceivers = await prisma.receiver.findMany({
       where: {
-        status: "RELEASED",
-        collection: {
-          receiver: {
-            OR: [{ linkedUserId: user.id }, { email }],
-          },
-        },
+        linkedUserId: me.id,
       },
-      orderBy: { updatedAt: "desc" },
       select: {
         id: true,
-        type: true,
+      },
+    });
+
+    const receiverIds = linkedReceivers.map((r) => r.id);
+
+    if (receiverIds.length === 0) {
+      return Response.json({
+        receivedCount: 0,
+        items: [],
+      });
+    }
+
+    // 3) Find collections + released items for those receivers
+    const collections = await prisma.memoryCollection.findMany({
+      where: {
+        receiverId: { in: receiverIds },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      select: {
+        id: true,
         title: true,
-        content: true,
-        videoUrl: true,
-        releaseDate: true,
-        status: true,
-        updatedAt: true, // we will use this as releasedAt (MVP)
-        collection: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        items: {
+          where: {
+            status: "RELEASED",
+          },
+          orderBy: {
+            createdAt: "asc",
+          },
           select: {
             id: true,
             title: true,
-            owner: {
+            content: true,
+            releaseDate: true,
+            releasedAt: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+
+            // ✅ attachments now hold IMAGE / VIDEO media
+            attachments: {
               select: {
-                name: true,
-                email: true,
+                id: true,
+                type: true,
+                mediaUrl: true,
+                mediaPublicId: true,
+                mediaFileName: true,
+                mediaMimeType: true,
+                createdAt: true,
+              },
+              orderBy: {
+                createdAt: "asc",
               },
             },
           },
@@ -73,31 +107,36 @@ export async function GET() {
       },
     });
 
-    // 4) Shape response for UI:
-    // - sender: collection.owner
-    // - releasedAt: updatedAt
-    const uiItems = items.map((i) => ({
-      id: i.id,
-      type: i.type,
-      title: i.title,
-      content: i.content,
-      videoUrl: i.videoUrl,
-      releaseDate: i.releaseDate,
-      status: i.status,
-      releasedAt: i.updatedAt, // MVP released timestamp
-      memory: {
-        id: i.collection.id,
-        title: i.collection.title,
-      },
-      sender: {
-        name: i.collection.owner.name,
-        email: i.collection.owner.email,
-      },
-    }));
+    // 4) Flatten all released items
+    const items = collections.flatMap((memory) =>
+      memory.items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        content: item.content,
+        releaseDate: item.releaseDate,
+        releasedAt: item.releasedAt,
+        status: item.status,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+
+        sender: {
+          name: memory.owner.name,
+          email: memory.owner.email,
+        },
+
+        memory: {
+          id: memory.id,
+          title: memory.title,
+        },
+
+        attachments: item.attachments,
+        attachmentCount: item.attachments.length,
+      }))
+    );
 
     return Response.json({
-      receivedCount: uiItems.length,
-      items: uiItems,
+      receivedCount: items.length,
+      items,
     });
   } catch (err) {
     console.error("GET /api/memory-received error:", err);

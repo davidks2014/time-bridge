@@ -1,8 +1,8 @@
-/**
+ /**
  * API: /api/memory-sent/[memoryId]
  *
  * Purpose:
- * - GET    : Get 1 memory (collection/card) with receiver + items (owner only)
+ * - GET    : Get 1 memory (collection/card) with receiver + items + attachments (owner only)
  * - DELETE : Delete the whole memory (owner only) and cascade delete items
  *
  * Rules:
@@ -19,26 +19,26 @@ import type { MemoryItemStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-// Next.js 16: params is a Promise
 type Params = { params: Promise<{ memoryId: string }> };
+
+function normalizeEmail(raw: string): string {
+  return String(raw ?? "").trim().toLowerCase();
+}
 
 /**
  * GET /api/memory-sent/[memoryId]
  */
 export async function GET(_: Request, { params }: Params) {
   try {
-    // 1) Unwrap params (Next.js 16)
     const { memoryId } = await params;
 
-    // 2) Must be logged in
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return Response.json({ error: "Not logged in." }, { status: 401 });
     }
 
-    // 3) Find current user
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email.toLowerCase() },
+      where: { email: normalizeEmail(session.user.email) },
       select: { id: true },
     });
 
@@ -46,12 +46,60 @@ export async function GET(_: Request, { params }: Params) {
       return Response.json({ error: "User not found." }, { status: 404 });
     }
 
-    // 4) Fetch memory (must belong to user)
     const memory = await prisma.memoryCollection.findFirst({
-      where: { id: memoryId, ownerId: user.id },
-      include: {
-        receiver: true,
-        items: { orderBy: { createdAt: "desc" } },
+      where: {
+        id: memoryId,
+        ownerId: user.id,
+      },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+
+        receiver: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            address: true,
+            identificationNo: true,
+          },
+        },
+
+        items: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          select: {
+            id: true,
+            title: true,
+            content: true,
+            releaseDate: true,
+            releasedAt: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+
+            attachments: {
+              orderBy: {
+                createdAt: "asc",
+              },
+              select: {
+                id: true,
+                type: true,
+                mediaUrl: true,
+                mediaPublicId: true,
+                mediaFileName: true,
+                mediaMimeType: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -59,7 +107,16 @@ export async function GET(_: Request, { params }: Params) {
       return Response.json({ error: "Memory not found." }, { status: 404 });
     }
 
-    return Response.json({ memory });
+    const formattedMemory = {
+      ...memory,
+      items: memory.items.map((item) => ({
+        ...item,
+        attachments: item.attachments ?? [],
+        attachmentCount: item.attachments?.length ?? 0,
+      })),
+    };
+
+    return Response.json({ memory: formattedMemory });
   } catch (err) {
     console.error("GET /api/memory-sent/[memoryId] error:", err);
     return Response.json({ error: "Server error." }, { status: 500 });
@@ -80,7 +137,7 @@ export async function DELETE(_: Request, { params }: Params) {
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email.toLowerCase() },
+      where: { email: normalizeEmail(session.user.email) },
       select: { id: true },
     });
 
@@ -88,12 +145,17 @@ export async function DELETE(_: Request, { params }: Params) {
       return Response.json({ error: "User not found." }, { status: 404 });
     }
 
-    // 1) Fetch memory with items status
     const memory = await prisma.memoryCollection.findFirst({
-      where: { id: memoryId, ownerId: user.id },
-      include: {
+      where: {
+        id: memoryId,
+        ownerId: user.id,
+      },
+      select: {
+        id: true,
         items: {
-          select: { status: true },
+          select: {
+            status: true,
+          },
         },
       },
     });
@@ -105,7 +167,6 @@ export async function DELETE(_: Request, { params }: Params) {
       );
     }
 
-    // 2) Check if ANY item already released
     const hasReleasedItem = memory.items.some(
       (item: { status: MemoryItemStatus }) => item.status === "RELEASED"
     );
@@ -120,7 +181,6 @@ export async function DELETE(_: Request, { params }: Params) {
       );
     }
 
-    // 3) Safe to delete (items cascade due to relation onDelete: Cascade)
     await prisma.memoryCollection.delete({
       where: { id: memory.id },
     });

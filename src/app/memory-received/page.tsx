@@ -7,13 +7,19 @@ import { formatSingaporeDateTime } from "@/lib/sg-time";
 
 type ReceivedItem = {
   id: string;
-  type: "TEXT" | "VIDEO";
+  type: "TEXT" | "IMAGE" | "VIDEO";
   title: string;
   content: string | null;
-  videoUrl: string | null;
+
+  // New shared media fields
+  mediaUrl: string | null;
+  mediaPublicId: string | null;
+  mediaFileName: string | null;
+  mediaMimeType: string | null;
+
   releaseDate: string | null;
   status: "DRAFT" | "RELEASED";
-  releasedAt: string;
+  releasedAt: string | null;
   sender: { name: string | null; email: string };
   memory: { id: string; title: string };
 };
@@ -109,12 +115,64 @@ export default function MemoryReceivedPage() {
                 </div>
 
                 <div style={{ marginTop: 10 }}>
-                  {i.type === "TEXT" ? (
+                  {i.type === "TEXT" && (
                     <div style={{ whiteSpace: "pre-wrap" }}>{i.content ?? ""}</div>
-                  ) : (
-                    <div>
-                      Video URL: <b>{i.videoUrl ?? "Not uploaded"}</b>
-                    </div>
+                  )}
+
+                  {i.type === "IMAGE" && (
+                    <>
+                      {i.mediaUrl ? (
+                        <div>
+                          <img
+                            src={i.mediaUrl}
+                            alt={i.title}
+                            style={{
+                              maxWidth: "100%",
+                              maxHeight: 360,
+                              borderRadius: 10,
+                              border: "1px solid #ddd",
+                            }}
+                          />
+
+                          {i.mediaFileName && (
+                            <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>
+                              File: <b>{i.mediaFileName}</b>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div>Image not uploaded.</div>
+                      )}
+                    </>
+                  )}
+
+                  {i.type === "VIDEO" && (
+                    <>
+                      {i.mediaUrl ? (
+                        <div>
+                          <video
+                            controls
+                            style={{
+                              width: "100%",
+                              maxHeight: 420,
+                              borderRadius: 10,
+                              border: "1px solid #ddd",
+                            }}
+                            src={i.mediaUrl}
+                          >
+                            Your browser does not support the video tag.
+                          </video>
+
+                          {i.mediaFileName && (
+                            <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>
+                              File: <b>{i.mediaFileName}</b>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div>Video not uploaded.</div>
+                      )}
+                    </>
                   )}
                 </div>
 

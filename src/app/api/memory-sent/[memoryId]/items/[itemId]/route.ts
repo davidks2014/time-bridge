@@ -1,79 +1,95 @@
-/**
- * API: /api/memory-sent/[memoryId]/items/[itemId]
- *
- * Purpose:
- * - PATCH: Sender edits 1 item (owner only)
- *
- * Rule:
- * - If ANY item in this memory is RELEASED -> memory LOCKED -> cannot edit
- */
-
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { parseSingaporeDateTimeInput } from "@/lib/sg-time";
 
 export const dynamic = "force-dynamic";
 
-type Params = { params: Promise<{ memoryId: string; itemId: string }> };
-type MemoryItemStatus = "DRAFT" | "RELEASED";
-type ItemType = "TEXT" | "VIDEO";
+function normalizeEmail(raw: string): string {
+  return String(raw ?? "").trim().toLowerCase();
+}
 
-export async function PATCH(req: Request, { params }: Params) {
+function parseOptionalReleaseDate(raw: unknown): Date | null {
   try {
-    const { memoryId, itemId } = await params;
+    return parseSingaporeDateTimeInput(raw);
+  } catch {
+    throw new Error("INVALID_RELEASE_DATE");
+  }
+}
 
-    // 1) Must be logged in
+/**
+ * PATCH /api/memory-sent/[memoryId]/items/[itemId]
+ *
+ * Purpose:
+ * - Edit one memory item under a memory collection
+ * - Only owner can edit
+ * - Cannot edit if item already released
+ * - Cannot edit if any item in the same collection is already released
+ */
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ memoryId: string; itemId: string }> }
+) {
+  try {
     const session = await getServerSession(authOptions);
+
     if (!session?.user?.email) {
       return Response.json({ error: "Not logged in." }, { status: 401 });
     }
 
-    // 2) Find current user
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email.toLowerCase() },
+      where: { email: normalizeEmail(session.user.email) },
       select: { id: true },
     });
+
     if (!user) {
       return Response.json({ error: "User not found." }, { status: 404 });
     }
 
-    // 3) Fetch memory (must belong to user) with all item statuses
-    const memory = await prisma.memoryCollection.findFirst({
-      where: { id: memoryId, ownerId: user.id },
-      include: {
-        items: { select: { id: true, status: true } },
-      },
-    });
+    const { memoryId, itemId } = await params;
+    const body = await req.json().catch(() => ({}));
 
-    if (!memory) {
-      return Response.json(
-        { error: "Memory not found (or not owned by you)." },
-        { status: 404 }
-      );
+    const title = String(body?.title ?? "").trim();
+    const content = body?.content == null ? null : String(body.content).trim();
+
+    if (!title) {
+      return Response.json({ error: "title is required." }, { status: 400 });
     }
 
-    // 4) LOCK RULE: if any RELEASED -> block edit
-    const hasReleasedItem = memory.items.some(
-      (i: { status: MemoryItemStatus }) => i.status === "RELEASED"
-    );
-    if (hasReleasedItem) {
-      return Response.json(
-        { error: "This memory is locked. You cannot edit after any message is released." },
-        { status: 400 }
-      );
+    let releaseDate: Date | null = null;
+    try {
+      releaseDate = parseOptionalReleaseDate(body?.releaseDate);
+    } catch (e) {
+      if ((e as Error).message === "INVALID_RELEASE_DATE") {
+        return Response.json(
+          {
+            error:
+              "Invalid releaseDate. Please choose a valid Singapore date and time.",
+          },
+          { status: 400 }
+        );
+      }
+      throw e;
     }
 
-    // 5) Fetch the item (must belong to this memory + owner)
+    // 1) Ensure item belongs to this memory + owner
     const item = await prisma.memoryItem.findFirst({
-      where: { id: itemId, collectionId: memoryId, ownerId: user.id },
-      select: { id: true, type: true, status: true },
+      where: {
+        id: itemId,
+        collectionId: memoryId,
+        ownerId: user.id,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
     });
 
     if (!item) {
       return Response.json({ error: "Item not found." }, { status: 404 });
     }
 
-    // Extra safety: item itself already released -> block edit
+    // 2) Prevent edit if item itself already released
     if (item.status === "RELEASED") {
       return Response.json(
         { error: "This item is already released and cannot be edited." },
@@ -81,59 +97,149 @@ export async function PATCH(req: Request, { params }: Params) {
       );
     }
 
-    // 6) Read payload
-    const body = await req.json();
+    // 3) Prevent edit if any item in same memory already released (collection lock rule)
+    const releasedSibling = await prisma.memoryItem.findFirst({
+      where: {
+        collectionId: memoryId,
+        ownerId: user.id,
+        status: "RELEASED",
+      },
+      select: { id: true },
+    });
 
-    const title = String(body.title ?? "").trim();
-    const content = body.content === undefined ? undefined : String(body.content ?? "").trim();
-    const releaseDateRaw = body.releaseDate === undefined ? undefined : body.releaseDate;
-
-    if (!title) {
-      return Response.json({ error: "title is required." }, { status: 400 });
-    }
-
-    // releaseDate:
-    // - null means "proof-of-life rule"
-    // - string must be valid date
-    let releaseDate: Date | null | undefined = undefined;
-    if (releaseDateRaw === null) {
-      releaseDate = null;
-    } else if (typeof releaseDateRaw === "string") {
-      const d = new Date(releaseDateRaw);
-      if (Number.isNaN(d.getTime())) {
-        return Response.json(
-          { error: "Invalid releaseDate format. Use ISO string or null." },
-          { status: 400 }
-        );
-      }
-      releaseDate = d;
-    } else if (releaseDateRaw !== undefined) {
+    if (releasedSibling) {
       return Response.json(
-        { error: "releaseDate must be ISO string or null." },
+        {
+          error:
+            "This memory is locked because at least one message has already been released.",
+        },
         { status: 400 }
       );
     }
 
-    // TEXT rules
-    if ((item.type as ItemType) === "TEXT") {
-      if (content !== undefined && !content) {
-        return Response.json({ error: "content cannot be empty for TEXT." }, { status: 400 });
-      }
+    // 4) Content is required for text message-based model
+    if (content == null || !content) {
+      return Response.json(
+        { error: "content is required." },
+        { status: 400 }
+      );
     }
 
-    // 7) Update
+    // 5) Update item
     const updated = await prisma.memoryItem.update({
-      where: { id: item.id },
+      where: { id: itemId },
       data: {
         title,
-        ...(content !== undefined ? { content } : {}),
-        ...(releaseDate !== undefined ? { releaseDate } : {}),
+        content,
+        releaseDate,
+      },
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        releaseDate: true,
+        releasedAt: true,
+        status: true,
+        updatedAt: true,
       },
     });
 
-    return Response.json({ item: updated });
+    return Response.json({
+      message: "Item updated successfully.",
+      item: updated,
+    });
   } catch (err) {
     console.error("PATCH /api/memory-sent/[memoryId]/items/[itemId] error:", err);
+    return Response.json({ error: "Server error." }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/memory-sent/[memoryId]/items/[itemId]
+ *
+ * Purpose:
+ * - Delete one memory item
+ * - Only owner can delete
+ * - Cannot delete if item already released
+ * - Cannot delete if any item in the same collection is already released
+ */
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ memoryId: string; itemId: string }> }
+) {
+  try {
+    const session = await getServerSession(authOptions);
+
+    if (!session?.user?.email) {
+      return Response.json({ error: "Not logged in." }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: normalizeEmail(session.user.email) },
+      select: { id: true },
+    });
+
+    if (!user) {
+      return Response.json({ error: "User not found." }, { status: 404 });
+    }
+
+    const { memoryId, itemId } = await params;
+
+    // 1) Ensure item belongs to this memory + owner
+    const item = await prisma.memoryItem.findFirst({
+      where: {
+        id: itemId,
+        collectionId: memoryId,
+        ownerId: user.id,
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+
+    if (!item) {
+      return Response.json({ error: "Item not found." }, { status: 404 });
+    }
+
+    // 2) Prevent delete if item already released
+    if (item.status === "RELEASED") {
+      return Response.json(
+        { error: "This item is already released and cannot be deleted." },
+        { status: 400 }
+      );
+    }
+
+    // 3) Prevent delete if any item in same memory already released (collection lock rule)
+    const releasedSibling = await prisma.memoryItem.findFirst({
+      where: {
+        collectionId: memoryId,
+        ownerId: user.id,
+        status: "RELEASED",
+      },
+      select: { id: true },
+    });
+
+    if (releasedSibling) {
+      return Response.json(
+        {
+          error:
+            "This memory is locked because at least one message has already been released.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // 4) Delete item (attachments cascade because of relation onDelete: Cascade)
+    await prisma.memoryItem.delete({
+      where: { id: itemId },
+    });
+
+    return Response.json({
+      message: "Item deleted successfully.",
+    });
+  } catch (err) {
+    console.error("DELETE /api/memory-sent/[memoryId]/items/[itemId] error:", err);
     return Response.json({ error: "Server error." }, { status: 500 });
   }
 }
