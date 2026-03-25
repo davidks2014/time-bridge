@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { formatSingaporeDateTime } from "@/lib/sg-time";
 
+const MAX_FILES = 5;
+const MAX_IMAGE_MB = 10;
+const MAX_VIDEO_MB = 100;
+
 type MismatchReceiver = {
   id: string;
   fullName: string;
@@ -57,6 +61,7 @@ export default function DashboardPage() {
 
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [fileError, setFileError] = useState("");
 
   const [releaseMode, setReleaseMode] = useState<"LATER" | "NOW">("LATER");
   const [releaseDateOnly, setReleaseDateOnly] = useState("");
@@ -137,6 +142,7 @@ export default function DashboardPage() {
 
   function resetAttachmentInputs() {
     setSelectedFiles([]);
+    setFileError("");
   }
 
   function resetMemoryForm() {
@@ -176,6 +182,62 @@ export default function DashboardPage() {
     if (file.type.startsWith("image/")) return "IMAGE";
     if (file.type.startsWith("video/")) return "VIDEO";
     throw new Error(`Unsupported file type: ${file.name}`);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const newFiles = Array.from(e.target.files ?? []);
+    setFileError("");
+
+    if (!newFiles.length) {
+      e.target.value = "";
+      return;
+    }
+
+    let updated = [...selectedFiles];
+
+    for (const file of newFiles) {
+      if (updated.length >= MAX_FILES) {
+        setFileError(`Maximum ${MAX_FILES} files allowed.`);
+        break;
+      }
+
+      const exists = updated.some(
+        (f) => f.name === file.name && f.size === file.size
+      );
+      if (exists) {
+        continue;
+      }
+
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+
+      if (!isImage && !isVideo) {
+        setFileError("Only image or video files allowed.");
+        continue;
+      }
+
+      const maxBytes = isImage
+        ? MAX_IMAGE_MB * 1024 * 1024
+        : MAX_VIDEO_MB * 1024 * 1024;
+
+      if (file.size > maxBytes) {
+        setFileError(
+          isImage
+            ? `Image too large (max ${MAX_IMAGE_MB}MB)`
+            : `Video too large (max ${MAX_VIDEO_MB}MB)`
+        );
+        continue;
+      }
+
+      updated.push(file);
+    }
+
+    setSelectedFiles(updated);
+    setError("");
+    setInfo("");
+
+    // allow selecting the same file again later
+    e.target.value = "";
   }
 
   async function confirmProofOfLife() {
@@ -271,6 +333,10 @@ export default function DashboardPage() {
       return setError("Please choose a release date and time, or select Set Date Later.");
     }
 
+    if (selectedFiles.length > MAX_FILES) {
+      return setError(`Maximum ${MAX_FILES} files allowed.`);
+    }
+
     setLoading(true);
 
     try {
@@ -337,6 +403,7 @@ export default function DashboardPage() {
 
   function removeSelectedFile(indexToRemove: number) {
     setSelectedFiles((prev) => prev.filter((_, index) => index !== indexToRemove));
+    setFileError("");
   }
 
   if (status === "loading") {
@@ -451,13 +518,12 @@ export default function DashboardPage() {
               type="file"
               accept="image/*,video/*"
               multiple
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []);
-                setSelectedFiles(files);
-                setError("");
-                setInfo("");
-              }}
+              onChange={handleFileChange}
             />
+
+            {fileError && (
+              <div style={{ color: "red", marginTop: 6 }}>{fileError}</div>
+            )}
 
             {selectedFileNames.length > 0 && (
               <div
@@ -469,7 +535,9 @@ export default function DashboardPage() {
                   gap: 8,
                 }}
               >
-                <div style={{ fontWeight: 800 }}>Selected files</div>
+                <div style={{ fontWeight: 800 }}>
+                  Selected files ({selectedFiles.length}/{MAX_FILES})
+                </div>
 
                 {selectedFiles.map((file, index) => {
                   const isImage = file.type.startsWith("image/");
@@ -492,6 +560,10 @@ export default function DashboardPage() {
 
                       <div style={{ color: "#666", fontSize: 12 }}>
                         Type: {isImage ? "IMAGE" : isVideo ? "VIDEO" : "UNKNOWN"} | Size:{" "}
+                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                      </div>
+
+                      <div style={{ fontSize: 11, color: "#999" }}>
                         {(file.size / 1024 / 1024).toFixed(2)} MB
                       </div>
 

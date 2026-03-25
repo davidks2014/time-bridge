@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { formatSingaporeDateTime } from "@/lib/sg-time";
 
+const MAX_EDIT_ATTACHMENTS_PER_ADD = 5;
+const MAX_IMAGE_MB = 10;
+const MAX_VIDEO_MB = 100;
+
 type MemoryItemStatus = "DRAFT" | "RELEASED";
 type AttachmentType = "IMAGE" | "VIDEO";
 
@@ -49,6 +53,14 @@ type Memory = {
   updatedAt: string;
   receiver: Receiver;
   items: MemoryItem[];
+};
+
+type UploadedAttachment = {
+  type: AttachmentType;
+  mediaUrl: string;
+  mediaPublicId: string;
+  mediaFileName: string | null;
+  mediaMimeType: string | null;
 };
 
 function splitDateTimeForInput(isoString: string | null): {
@@ -151,6 +163,13 @@ export default function MemoryDetailsPage({
 
   const [deleting, setDeleting] = useState(false);
 
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
+  const [attachmentError, setAttachmentError] = useState("");
+
+  const [newEditFiles, setNewEditFiles] = useState<File[]>([]);
+  const [newEditFileError, setNewEditFileError] = useState("");
+  const [addingAttachments, setAddingAttachments] = useState(false);
+
   const isLocked = useMemo(() => {
     if (!memory) return false;
     return memory.items.some((i) => i.status === "RELEASED");
@@ -162,6 +181,7 @@ export default function MemoryDetailsPage({
 
   async function loadMemory() {
     setPageError("");
+    setAttachmentError("");
     setLoading(true);
 
     try {
@@ -202,8 +222,21 @@ export default function MemoryDetailsPage({
     return `${datePart}T${timePart}`;
   }
 
+  function resetNewEditFiles() {
+    setNewEditFiles([]);
+    setNewEditFileError("");
+  }
+
+  function inferAttachmentType(file: File): AttachmentType {
+    if (file.type.startsWith("image/")) return "IMAGE";
+    if (file.type.startsWith("video/")) return "VIDEO";
+    throw new Error(`Unsupported file type: ${file.name}`);
+  }
+
   function startEdit(item: MemoryItem) {
     setEditError("");
+    setAttachmentError("");
+    resetNewEditFiles();
 
     if (isLocked) {
       setEditError("This memory is locked because at least one message has already been released.");
@@ -232,6 +265,143 @@ export default function MemoryDetailsPage({
     setEditReleaseMode("LATER");
     resetEditReleaseInputs();
     setEditError("");
+    setAttachmentError("");
+    resetNewEditFiles();
+  }
+
+  function handleNewEditFilesChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    setNewEditFileError("");
+
+    if (!files.length) {
+      e.target.value = "";
+      return;
+    }
+
+    let updated = [...newEditFiles];
+
+    for (const file of files) {
+      if (updated.length >= MAX_EDIT_ATTACHMENTS_PER_ADD) {
+        setNewEditFileError(`Maximum ${MAX_EDIT_ATTACHMENTS_PER_ADD} files allowed each time.`);
+        break;
+      }
+
+      const exists = updated.some(
+        (f) => f.name === file.name && f.size === file.size
+      );
+      if (exists) continue;
+
+      const isImage = file.type.startsWith("image/");
+      const isVideo = file.type.startsWith("video/");
+
+      if (!isImage && !isVideo) {
+        setNewEditFileError("Only image or video files allowed.");
+        continue;
+      }
+
+      const maxBytes = isImage
+        ? MAX_IMAGE_MB * 1024 * 1024
+        : MAX_VIDEO_MB * 1024 * 1024;
+
+      if (file.size > maxBytes) {
+        setNewEditFileError(
+          isImage
+            ? `Image too large (max ${MAX_IMAGE_MB}MB)`
+            : `Video too large (max ${MAX_VIDEO_MB}MB)`
+        );
+        continue;
+      }
+
+      updated.push(file);
+    }
+
+    setNewEditFiles(updated);
+    e.target.value = "";
+  }
+
+  function removeNewEditFile(indexToRemove: number) {
+    setNewEditFiles((prev) => prev.filter((_, index) => index !== indexToRemove));
+    setNewEditFileError("");
+  }
+
+  async function uploadOneAttachment(file: File): Promise<UploadedAttachment> {
+    const attachmentType = inferAttachmentType(file);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("itemType", attachmentType);
+
+    const res = await fetch("/api/media/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      throw new Error(json?.error ?? `Failed to upload file: ${file.name}`);
+    }
+
+    return {
+      type: attachmentType,
+      mediaUrl: String(json.mediaUrl),
+      mediaPublicId: String(json.mediaPublicId),
+      mediaFileName: json.mediaFileName ? String(json.mediaFileName) : file.name,
+      mediaMimeType: json.mediaMimeType ? String(json.mediaMimeType) : file.type,
+    };
+  }
+
+  async function addAttachmentsToItem(itemId: string) {
+    if (!memory) return;
+    if (!editingItemId || editingItemId !== itemId) return;
+
+    setAttachmentError("");
+    setNewEditFileError("");
+
+    if (isLocked) {
+      setAttachmentError("This memory is locked. You cannot add attachments after release.");
+      return;
+    }
+
+    if (newEditFiles.length === 0) {
+      setNewEditFileError("Please select at least one file.");
+      return;
+    }
+
+    setAddingAttachments(true);
+
+    try {
+      const uploadedAttachments: UploadedAttachment[] = [];
+
+      for (const file of newEditFiles) {
+        const uploaded = await uploadOneAttachment(file);
+        uploadedAttachments.push(uploaded);
+      }
+
+      for (const attachment of uploadedAttachments) {
+        const res = await fetch(
+          `/api/memory-sent/${memory.id}/items/${itemId}/attachments`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(attachment),
+          }
+        );
+
+        const json = await res.json();
+
+        if (!res.ok) {
+          throw new Error(json?.error ?? "Failed to attach uploaded file to item.");
+        }
+      }
+
+      resetNewEditFiles();
+      await loadMemory();
+    } catch (err) {
+      setAttachmentError((err as Error)?.message || "Failed to add attachments.");
+    } finally {
+      setAddingAttachments(false);
+    }
   }
 
   async function saveEdit() {
@@ -328,6 +498,44 @@ export default function MemoryDetailsPage({
     }
   }
 
+  async function deleteAttachment(itemId: string, attachmentId: string) {
+    if (!memory) return;
+
+    setAttachmentError("");
+
+    if (isLocked) {
+      setAttachmentError("This memory is locked. You cannot delete attachments after release.");
+      return;
+    }
+
+    const ok = window.confirm("Delete this attachment?");
+    if (!ok) return;
+
+    setDeletingAttachmentId(attachmentId);
+
+    try {
+      const res = await fetch(
+        `/api/memory-sent/${memory.id}/attachments/${attachmentId}?itemId=${encodeURIComponent(itemId)}`,
+        {
+          method: "DELETE",
+        }
+      );
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setAttachmentError(json?.error ?? "Failed to delete attachment.");
+        return;
+      }
+
+      await loadMemory();
+    } catch {
+      setAttachmentError("Network error while deleting attachment.");
+    } finally {
+      setDeletingAttachmentId(null);
+    }
+  }
+
   if (status === "loading" || loading) {
     return <div style={{ padding: 20 }}>Loading memory...</div>;
   }
@@ -376,6 +584,7 @@ export default function MemoryDetailsPage({
         )}
 
         {pageError && <div style={{ marginTop: 10, color: "red" }}>{pageError}</div>}
+        {attachmentError && <div style={{ marginTop: 10, color: "red" }}>{attachmentError}</div>}
       </div>
 
       <div style={{ marginTop: 12, border: "1px solid #ddd", borderRadius: 12, padding: 14 }}>
@@ -444,49 +653,73 @@ export default function MemoryDetailsPage({
                         <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
                           <div style={{ fontWeight: 800 }}>Attachments</div>
 
-                          {attachments.map((att) => (
-                            <div
-                              key={att.id}
-                              style={{
-                                border: "1px solid #f0f0f0",
-                                borderRadius: 10,
-                                padding: 10,
-                              }}
-                            >
-                              <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
-                                <b>{att.type}</b>
-                                {att.mediaFileName ? ` • ${att.mediaFileName}` : ""}
-                              </div>
+                          {attachments.map((att) => {
+                            const isDeletingThisAttachment = deletingAttachmentId === att.id;
 
-                              {att.type === "IMAGE" && (
-                                <img
-                                  src={att.mediaUrl}
-                                  alt={att.mediaFileName ?? item.title}
+                            return (
+                              <div
+                                key={att.id}
+                                style={{
+                                  border: "1px solid #f0f0f0",
+                                  borderRadius: 10,
+                                  padding: 10,
+                                }}
+                              >
+                                <div
                                   style={{
-                                    maxWidth: "100%",
-                                    maxHeight: 360,
-                                    borderRadius: 10,
-                                    border: "1px solid #ddd",
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    gap: 10,
+                                    alignItems: "center",
+                                    marginBottom: 8,
                                   }}
-                                />
-                              )}
-
-                              {att.type === "VIDEO" && (
-                                <video
-                                  controls
-                                  style={{
-                                    width: "100%",
-                                    maxHeight: 420,
-                                    borderRadius: 10,
-                                    border: "1px solid #ddd",
-                                  }}
-                                  src={att.mediaUrl}
                                 >
-                                  Your browser does not support the video tag.
-                                </video>
-                              )}
-                            </div>
-                          ))}
+                                  <div style={{ fontSize: 12, color: "#666" }}>
+                                    <b>{att.type}</b>
+                                    {att.mediaFileName ? ` • ${att.mediaFileName}` : ""}
+                                  </div>
+
+                                  {!isLocked && (
+                                    <button
+                                      type="button"
+                                      onClick={() => deleteAttachment(item.id, att.id)}
+                                      disabled={isDeletingThisAttachment}
+                                    >
+                                      {isDeletingThisAttachment ? "Deleting..." : "Delete Attachment"}
+                                    </button>
+                                  )}
+                                </div>
+
+                                {att.type === "IMAGE" && (
+                                  <img
+                                    src={att.mediaUrl}
+                                    alt={att.mediaFileName ?? item.title}
+                                    style={{
+                                      maxWidth: "100%",
+                                      maxHeight: 360,
+                                      borderRadius: 10,
+                                      border: "1px solid #ddd",
+                                    }}
+                                  />
+                                )}
+
+                                {att.type === "VIDEO" && (
+                                  <video
+                                    controls
+                                    style={{
+                                      width: "100%",
+                                      maxHeight: 420,
+                                      borderRadius: 10,
+                                      border: "1px solid #ddd",
+                                    }}
+                                    src={att.mediaUrl}
+                                  >
+                                    Your browser does not support the video tag.
+                                  </video>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
 
@@ -518,51 +751,146 @@ export default function MemoryDetailsPage({
                           <div style={{ marginTop: 4, display: "grid", gap: 10 }}>
                             <div style={{ fontWeight: 800 }}>Current Attachments</div>
 
-                            {attachments.map((att) => (
-                              <div
-                                key={att.id}
-                                style={{
-                                  border: "1px solid #f0f0f0",
-                                  borderRadius: 10,
-                                  padding: 10,
-                                }}
-                              >
-                                <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
-                                  <b>{att.type}</b>
-                                  {att.mediaFileName ? ` • ${att.mediaFileName}` : ""}
-                                </div>
+                            {attachments.map((att) => {
+                              const isDeletingThisAttachment = deletingAttachmentId === att.id;
 
-                                {att.type === "IMAGE" && (
-                                  <img
-                                    src={att.mediaUrl}
-                                    alt={att.mediaFileName ?? item.title}
+                              return (
+                                <div
+                                  key={att.id}
+                                  style={{
+                                    border: "1px solid #f0f0f0",
+                                    borderRadius: 10,
+                                    padding: 10,
+                                  }}
+                                >
+                                  <div
                                     style={{
-                                      maxWidth: "100%",
-                                      maxHeight: 240,
-                                      borderRadius: 10,
-                                      border: "1px solid #ddd",
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      gap: 10,
+                                      alignItems: "center",
+                                      marginBottom: 8,
                                     }}
-                                  />
-                                )}
-
-                                {att.type === "VIDEO" && (
-                                  <video
-                                    controls
-                                    style={{
-                                      width: "100%",
-                                      maxHeight: 320,
-                                      borderRadius: 10,
-                                      border: "1px solid #ddd",
-                                    }}
-                                    src={att.mediaUrl}
                                   >
-                                    Your browser does not support the video tag.
-                                  </video>
-                                )}
-                              </div>
-                            ))}
+                                    <div style={{ fontSize: 12, color: "#666" }}>
+                                      <b>{att.type}</b>
+                                      {att.mediaFileName ? ` • ${att.mediaFileName}` : ""}
+                                    </div>
+
+                                    {!isLocked && (
+                                      <button
+                                        type="button"
+                                        onClick={() => deleteAttachment(item.id, att.id)}
+                                        disabled={isDeletingThisAttachment}
+                                      >
+                                        {isDeletingThisAttachment ? "Deleting..." : "Delete Attachment"}
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {att.type === "IMAGE" && (
+                                    <img
+                                      src={att.mediaUrl}
+                                      alt={att.mediaFileName ?? item.title}
+                                      style={{
+                                        maxWidth: "100%",
+                                        maxHeight: 240,
+                                        borderRadius: 10,
+                                        border: "1px solid #ddd",
+                                      }}
+                                    />
+                                  )}
+
+                                  {att.type === "VIDEO" && (
+                                    <video
+                                      controls
+                                      style={{
+                                        width: "100%",
+                                        maxHeight: 320,
+                                        borderRadius: 10,
+                                        border: "1px solid #ddd",
+                                      }}
+                                      src={att.mediaUrl}
+                                    >
+                                      Your browser does not support the video tag.
+                                    </video>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
+
+                        <div style={{ marginTop: 10, border: "1px solid #eee", borderRadius: 10, padding: 10 }}>
+                          <div style={{ fontWeight: 800, marginBottom: 8 }}>Add New Attachment(s)</div>
+
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*,video/*"
+                            onChange={handleNewEditFilesChange}
+                            disabled={addingAttachments || isLocked}
+                          />
+
+                          {newEditFileError && (
+                            <div style={{ color: "red", marginTop: 8 }}>{newEditFileError}</div>
+                          )}
+
+                          {newEditFiles.length > 0 && (
+                            <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                              <div style={{ fontSize: 12, color: "#666" }}>
+                                Selected files ({newEditFiles.length}/{MAX_EDIT_ATTACHMENTS_PER_ADD})
+                              </div>
+
+                              {newEditFiles.map((file, index) => {
+                                const isImage = file.type.startsWith("image/");
+                                const isVideo = file.type.startsWith("video/");
+
+                                return (
+                                  <div
+                                    key={`${file.name}-${index}`}
+                                    style={{
+                                      border: "1px solid #f0f0f0",
+                                      borderRadius: 8,
+                                      padding: 8,
+                                      display: "grid",
+                                      gap: 6,
+                                    }}
+                                  >
+                                    <div style={{ fontSize: 12 }}>
+                                      <b>{file.name}</b>
+                                    </div>
+
+                                    <div style={{ fontSize: 11, color: "#666" }}>
+                                      Type: {isImage ? "IMAGE" : isVideo ? "VIDEO" : "UNKNOWN"} | Size:{" "}
+                                      {(file.size / 1024 / 1024).toFixed(2)} MB
+                                    </div>
+
+                                    <div>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeNewEditFile(index)}
+                                        disabled={addingAttachments}
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => addAttachmentsToItem(item.id)}
+                                  disabled={addingAttachments || isLocked}
+                                >
+                                  {addingAttachments ? "Uploading..." : "Add Attachment(s)"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
 
                         <div style={{ fontSize: 12, color: "#666" }}>
                           Release Time (Singapore Time)
@@ -635,10 +963,10 @@ export default function MemoryDetailsPage({
                       )}
 
                       <div style={{ marginTop: 12, display: "flex", gap: 10 }}>
-                        <button onClick={saveEdit} disabled={saving || isLocked}>
+                        <button onClick={saveEdit} disabled={saving || isLocked || addingAttachments}>
                           {saving ? "Saving..." : "Save"}
                         </button>
-                        <button onClick={cancelEdit} disabled={saving}>
+                        <button onClick={cancelEdit} disabled={saving || addingAttachments}>
                           Cancel
                         </button>
                       </div>

@@ -1,4 +1,4 @@
- /**
+/**
  * API: /api/memory-sent/[memoryId]
  *
  * Purpose:
