@@ -4,6 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { formatSingaporeDateTime } from "@/lib/sg-time";
+import {
+  getOptimizedImageUrl,
+  getOptimizedVideoUrl,
+} from "@/lib/cloudinary-media";
 
 const MAX_EDIT_ATTACHMENTS_PER_ADD = 5;
 const MAX_IMAGE_MB = 10;
@@ -655,6 +659,18 @@ export default function MemoryDetailsPage({
 
                           {attachments.map((att) => {
                             const isDeletingThisAttachment = deletingAttachmentId === att.id;
+                            const imageUrl =
+                              att.type === "IMAGE"
+                                ? getOptimizedImageUrl(att.mediaUrl, att.mediaPublicId, {
+                                    width: 1200,
+                                  })
+                                : null;
+                            const videoUrl =
+                              att.type === "VIDEO"
+                                ? getOptimizedVideoUrl(att.mediaUrl, att.mediaPublicId, {
+                                    width: 1280,
+                                  })
+                                : null;
 
                             return (
                               <div
@@ -690,9 +706,9 @@ export default function MemoryDetailsPage({
                                   )}
                                 </div>
 
-                                {att.type === "IMAGE" && (
+                                {att.type === "IMAGE" && imageUrl && (
                                   <img
-                                    src={att.mediaUrl}
+                                    src={imageUrl}
                                     alt={att.mediaFileName ?? item.title}
                                     style={{
                                       maxWidth: "100%",
@@ -703,16 +719,17 @@ export default function MemoryDetailsPage({
                                   />
                                 )}
 
-                                {att.type === "VIDEO" && (
+                                {att.type === "VIDEO" && videoUrl && (
                                   <video
                                     controls
+                                    preload="metadata"
                                     style={{
                                       width: "100%",
                                       maxHeight: 420,
                                       borderRadius: 10,
                                       border: "1px solid #ddd",
                                     }}
-                                    src={att.mediaUrl}
+                                    src={videoUrl}
                                   >
                                     Your browser does not support the video tag.
                                   </video>
@@ -753,6 +770,18 @@ export default function MemoryDetailsPage({
 
                             {attachments.map((att) => {
                               const isDeletingThisAttachment = deletingAttachmentId === att.id;
+                              const imageUrl =
+                                att.type === "IMAGE"
+                                  ? getOptimizedImageUrl(att.mediaUrl, att.mediaPublicId, {
+                                      width: 900,
+                                    })
+                                  : null;
+                              const videoUrl =
+                                att.type === "VIDEO"
+                                  ? getOptimizedVideoUrl(att.mediaUrl, att.mediaPublicId, {
+                                      width: 960,
+                                    })
+                                  : null;
 
                               return (
                                 <div
@@ -788,9 +817,9 @@ export default function MemoryDetailsPage({
                                     )}
                                   </div>
 
-                                  {att.type === "IMAGE" && (
+                                  {att.type === "IMAGE" && imageUrl && (
                                     <img
-                                      src={att.mediaUrl}
+                                      src={imageUrl}
                                       alt={att.mediaFileName ?? item.title}
                                       style={{
                                         maxWidth: "100%",
@@ -801,16 +830,17 @@ export default function MemoryDetailsPage({
                                     />
                                   )}
 
-                                  {att.type === "VIDEO" && (
+                                  {att.type === "VIDEO" && videoUrl && (
                                     <video
                                       controls
+                                      preload="metadata"
                                       style={{
                                         width: "100%",
                                         maxHeight: 320,
                                         borderRadius: 10,
                                         border: "1px solid #ddd",
                                       }}
-                                      src={att.mediaUrl}
+                                      src={videoUrl}
                                     >
                                       Your browser does not support the video tag.
                                     </video>

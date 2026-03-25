@@ -4,25 +4,72 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import { formatSingaporeDateTime } from "@/lib/sg-time";
+import {
+  getOptimizedImageUrl,
+  getOptimizedVideoUrl,
+} from "@/lib/cloudinary-media";
+
+type AttachmentType = "IMAGE" | "VIDEO";
+
+type ReceivedAttachment = {
+  id: string;
+  type: AttachmentType;
+  mediaUrl: string;
+  mediaPublicId: string;
+  mediaFileName: string | null;
+  mediaMimeType: string | null;
+  createdAt: string;
+};
 
 type ReceivedItem = {
   id: string;
-  type: "TEXT" | "IMAGE" | "VIDEO";
   title: string;
-  content: string | null;
-
-  // New shared media fields
-  mediaUrl: string | null;
-  mediaPublicId: string | null;
-  mediaFileName: string | null;
-  mediaMimeType: string | null;
-
+  content: string;
   releaseDate: string | null;
-  status: "DRAFT" | "RELEASED";
   releasedAt: string | null;
+  status: "DRAFT" | "RELEASED";
+  createdAt: string;
+  updatedAt: string;
   sender: { name: string | null; email: string };
   memory: { id: string; title: string };
+  attachments: ReceivedAttachment[];
+  attachmentCount: number;
 };
+
+function normalizeReceivedItem(raw: any): ReceivedItem {
+  return {
+    id: String(raw?.id ?? ""),
+    title: String(raw?.title ?? ""),
+    content: String(raw?.content ?? ""),
+    releaseDate: raw?.releaseDate ?? null,
+    releasedAt: raw?.releasedAt ?? null,
+    status: (raw?.status ?? "DRAFT") as "DRAFT" | "RELEASED",
+    createdAt: String(raw?.createdAt ?? ""),
+    updatedAt: String(raw?.updatedAt ?? ""),
+    sender: {
+      name: raw?.sender?.name ? String(raw.sender.name) : null,
+      email: String(raw?.sender?.email ?? ""),
+    },
+    memory: {
+      id: String(raw?.memory?.id ?? ""),
+      title: String(raw?.memory?.title ?? ""),
+    },
+    attachments: Array.isArray(raw?.attachments)
+      ? raw.attachments.map((att: any) => ({
+          id: String(att?.id ?? ""),
+          type: String(att?.type ?? "IMAGE") as AttachmentType,
+          mediaUrl: String(att?.mediaUrl ?? ""),
+          mediaPublicId: String(att?.mediaPublicId ?? ""),
+          mediaFileName: att?.mediaFileName ? String(att.mediaFileName) : null,
+          mediaMimeType: att?.mediaMimeType ? String(att.mediaMimeType) : null,
+          createdAt: String(att?.createdAt ?? ""),
+        }))
+      : [],
+    attachmentCount: Array.isArray(raw?.attachments)
+      ? raw.attachments.length
+      : Number(raw?.attachmentCount ?? 0),
+  };
+}
 
 export default function MemoryReceivedPage() {
   const router = useRouter();
@@ -46,8 +93,12 @@ export default function MemoryReceivedPage() {
         return;
       }
 
+      const normalizedItems = Array.isArray(json.items)
+        ? json.items.map(normalizeReceivedItem)
+        : [];
+
       setReceivedCount(json.receivedCount ?? 0);
-      setItems(json.items ?? []);
+      setItems(normalizedItems);
     } catch {
       setError("Network error.");
     } finally {
@@ -102,10 +153,6 @@ export default function MemoryReceivedPage() {
                 <div style={{ fontWeight: 900 }}>{i.title}</div>
 
                 <div style={{ marginTop: 6, color: "#555" }}>
-                  Type: <b>{i.type}</b>
-                </div>
-
-                <div style={{ marginTop: 6, color: "#555" }}>
                   From: <b>{senderLabel}</b>
                   {i.sender?.email ? <span style={{ color: "#777" }}> ({i.sender.email})</span> : null}
                 </div>
@@ -114,67 +161,78 @@ export default function MemoryReceivedPage() {
                   Released on: <b>{releasedOn}</b>
                 </div>
 
-                <div style={{ marginTop: 10 }}>
-                  {i.type === "TEXT" && (
-                    <div style={{ whiteSpace: "pre-wrap" }}>{i.content ?? ""}</div>
-                  )}
-
-                  {i.type === "IMAGE" && (
-                    <>
-                      {i.mediaUrl ? (
-                        <div>
-                          <img
-                            src={i.mediaUrl}
-                            alt={i.title}
-                            style={{
-                              maxWidth: "100%",
-                              maxHeight: 360,
-                              borderRadius: 10,
-                              border: "1px solid #ddd",
-                            }}
-                          />
-
-                          {i.mediaFileName && (
-                            <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>
-                              File: <b>{i.mediaFileName}</b>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div>Image not uploaded.</div>
-                      )}
-                    </>
-                  )}
-
-                  {i.type === "VIDEO" && (
-                    <>
-                      {i.mediaUrl ? (
-                        <div>
-                          <video
-                            controls
-                            style={{
-                              width: "100%",
-                              maxHeight: 420,
-                              borderRadius: 10,
-                              border: "1px solid #ddd",
-                            }}
-                            src={i.mediaUrl}
-                          >
-                            Your browser does not support the video tag.
-                          </video>
-
-                          {i.mediaFileName && (
-                            <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>
-                              File: <b>{i.mediaFileName}</b>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div>Video not uploaded.</div>
-                      )}
-                    </>
-                  )}
+                <div style={{ marginTop: 6, color: "#555" }}>
+                  Attachments: <b>{i.attachmentCount}</b>
                 </div>
+
+                <div style={{ marginTop: 10, whiteSpace: "pre-wrap" }}>{i.content}</div>
+
+                {i.attachments.length > 0 && (
+                  <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+                    <div style={{ fontWeight: 800 }}>Attachments</div>
+
+                    {i.attachments.map((att) => {
+                      const imageUrl =
+                        att.type === "IMAGE"
+                          ? getOptimizedImageUrl(att.mediaUrl, att.mediaPublicId, {
+                              width: 1200,
+                            })
+                          : null;
+
+                      const videoUrl =
+                        att.type === "VIDEO"
+                          ? getOptimizedVideoUrl(att.mediaUrl, att.mediaPublicId, {
+                              width: 1280,
+                            })
+                          : null;
+
+                      return (
+                        <div
+                          key={att.id}
+                          style={{
+                            border: "1px solid #f0f0f0",
+                            borderRadius: 10,
+                            padding: 10,
+                          }}
+                        >
+                          <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>
+                            <b>{att.type}</b>
+                            {att.mediaFileName ? ` • ${att.mediaFileName}` : ""}
+                          </div>
+
+                          {att.type === "IMAGE" && imageUrl && (
+                            <img
+                              src={imageUrl}
+                              alt={att.mediaFileName ?? i.title}
+                              style={{
+                                maxWidth: "100%",
+                                maxHeight: 360,
+                                borderRadius: 10,
+                                border: "1px solid #ddd",
+                              }}
+                            />
+                          )}
+
+                          {att.type === "VIDEO" && videoUrl && (
+                            <video
+                              controls
+                              preload="metadata"
+                              style={{
+                                width: "100%",
+                                maxHeight: 420,
+                                borderRadius: 10,
+                                border: "1px solid #ddd",
+                              }}
+                              src={videoUrl}
+                            >
+                              Your browser does not support the video tag.
+                            </video>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 <div style={{ marginTop: 10, fontSize: 12, color: "#777" }}>
                   Memory Card: {i.memory.title}
