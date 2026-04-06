@@ -2,6 +2,7 @@
 import cloudinary from "@/lib/cloudinary";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -119,13 +120,27 @@ function mapValidationErrorToResponse(message: string) {
 
 export async function POST(req: Request) {
   try {
-    // 1) Require authenticated user to reduce public abuse
+    // 1) Require authenticated user
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return Response.json({ error: "Not logged in." }, { status: 401 });
     }
 
-    // 2) Read multipart form
+    // 2) Find user and current quota usage
+    const user = await prisma.user.findUnique({
+      where: { email: String(session.user.email).trim().toLowerCase() },
+      select: {
+        id: true,
+        storageUsedBytes: true,
+        storageLimitBytes: true,
+      },
+    });
+
+    if (!user) {
+      return Response.json({ error: "User not found." }, { status: 404 });
+    }
+
+    // 3) Read multipart form
     const form = await req.formData();
     const file = form.get("file");
 
@@ -133,7 +148,7 @@ export async function POST(req: Request) {
       return Response.json({ error: "file is required." }, { status: 400 });
     }
 
-    // 3) Normalize item type
+    // 4) Normalize item type
     let itemType: "IMAGE" | "VIDEO";
     try {
       itemType = normalizeItemType(form.get("itemType"));
@@ -143,7 +158,7 @@ export async function POST(req: Request) {
       throw err;
     }
 
-    // 4) Validate uploaded file
+    // 5) Validate uploaded file
     try {
       validateFile(file, itemType);
     } catch (err) {
@@ -152,7 +167,32 @@ export async function POST(req: Request) {
       throw err;
     }
 
-    // 5) Convert to buffer
+    // 6) Storage quota check
+    const storageUsedBytes = BigInt(user.storageUsedBytes);
+    const storageLimitBytes = BigInt(user.storageLimitBytes);
+    const incomingFileBytes = BigInt(file.size);
+    const nextUsedBytes = storageUsedBytes + incomingFileBytes;
+
+    if (nextUsedBytes > storageLimitBytes) {
+      const remainingBytes = storageLimitBytes > storageUsedBytes
+        ? storageLimitBytes - storageUsedBytes
+        : BigInt(0);
+
+      return Response.json(
+        {
+          error: "Storage quota exceeded. Please delete some files or upgrade your plan.",
+          storage: {
+            usedBytes: storageUsedBytes.toString(),
+            limitBytes: storageLimitBytes.toString(),
+            remainingBytes: remainingBytes.toString(),
+            incomingFileBytes: incomingFileBytes.toString(),
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+    // 7) Convert to buffer
     const bytes = Buffer.from(await file.arrayBuffer());
     const resourceType = inferResourceType(itemType);
 
@@ -161,7 +201,7 @@ export async function POST(req: Request) {
         ? "time-bridge/memories/videos"
         : "time-bridge/memories/images";
 
-    // 6) Upload to Cloudinary
+    // 8) Upload to Cloudinary
     const result = await new Promise<any>((resolve, reject) => {
       const upload = cloudinary.uploader.upload_stream(
         {
@@ -170,8 +210,6 @@ export async function POST(req: Request) {
           use_filename: true,
           unique_filename: true,
           overwrite: false,
-
-          // Small optimization for image delivery
           transformation:
             itemType === "IMAGE"
               ? [{ width: 1600, crop: "limit" }]
@@ -195,7 +233,7 @@ export async function POST(req: Request) {
       upload.end(bytes);
     });
 
-    // 7) Return only useful metadata
+    // 9) Return useful metadata
     return Response.json({
       message: "Media uploaded successfully.",
       itemType,
@@ -206,6 +244,11 @@ export async function POST(req: Request) {
       bytes: result.bytes ?? file.size,
       resourceType: result.resource_type ?? resourceType,
       originalFileSize: file.size,
+      storage: {
+        usedBytes: storageUsedBytes.toString(),
+        limitBytes: storageLimitBytes.toString(),
+        projectedUsedBytes: nextUsedBytes.toString(),
+      },
     });
   } catch (err) {
     console.error("POST /api/media/upload error:", err);

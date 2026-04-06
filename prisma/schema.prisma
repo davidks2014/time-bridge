@@ -141,6 +141,13 @@ model User {
   confirmationIntervalDays Int       @default(30)
 
   // =========================================
+  // Storage Quota System
+  // =========================================
+  // 50MB free quota by default
+  storageUsedBytes  BigInt @default(0)
+  storageLimitBytes BigInt @default(52428800)
+
+  // =========================================
   // NextAuth Relations
   // =========================================
   accounts Account[]
@@ -299,10 +306,11 @@ model MemoryAttachment {
   type AttachmentType
 
   // Cloudinary / media metadata
-  mediaUrl      String
-  mediaPublicId String
-  mediaFileName String?
-  mediaMimeType String?
+  mediaUrl       String
+  mediaPublicId  String
+  mediaFileName  String?
+  mediaMimeType  String?
+  mediaSizeBytes BigInt @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

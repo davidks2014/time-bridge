@@ -35,6 +35,7 @@ function normalizeAttachmentType(raw: unknown): AttachmentType {
  * - Only owner can add
  * - Cannot add if item is released
  * - Cannot add if any item in same memory is already released
+ * - Increases user's storageUsedBytes
  */
 export async function POST(req: Request, { params }: Params) {
   try {
@@ -46,7 +47,11 @@ export async function POST(req: Request, { params }: Params) {
 
     const user = await prisma.user.findUnique({
       where: { email: normalizeEmail(session.user.email) },
-      select: { id: true },
+      select: {
+        id: true,
+        storageUsedBytes: true,
+        storageLimitBytes: true,
+      },
     });
 
     if (!user) {
@@ -75,6 +80,9 @@ export async function POST(req: Request, { params }: Params) {
       ? String(body.mediaMimeType).trim()
       : null;
 
+    const rawSize = body?.mediaSizeBytes ?? body?.bytes ?? body?.originalFileSize ?? 0;
+    const mediaSizeBytes = BigInt(Number(rawSize) || 0);
+
     if (!mediaUrl) {
       return Response.json({ error: "mediaUrl is required." }, { status: 400 });
     }
@@ -82,6 +90,13 @@ export async function POST(req: Request, { params }: Params) {
     if (!mediaPublicId) {
       return Response.json(
         { error: "mediaPublicId is required." },
+        { status: 400 }
+      );
+    }
+
+    if (mediaSizeBytes <= BigInt(0)) {
+      return Response.json(
+        { error: "mediaSizeBytes is required and must be greater than 0." },
         { status: 400 }
       );
     }
@@ -131,32 +146,75 @@ export async function POST(req: Request, { params }: Params) {
       );
     }
 
-    // 4) Create attachment
-    const attachment = await prisma.memoryAttachment.create({
-      data: {
-        itemId,
-        type,
-        mediaUrl,
-        mediaPublicId,
-        mediaFileName,
-        mediaMimeType,
-      },
-      select: {
-        id: true,
-        type: true,
-        mediaUrl: true,
-        mediaPublicId: true,
-        mediaFileName: true,
-        mediaMimeType: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    // 4) Quota check again here (important)
+    const usedBytes = BigInt(user.storageUsedBytes);
+    const limitBytes = BigInt(user.storageLimitBytes);
+    const projectedUsedBytes = usedBytes + mediaSizeBytes;
+
+    if (projectedUsedBytes > limitBytes) {
+      return Response.json(
+        {
+          error: "Storage quota exceeded. Please delete some files or upgrade your plan.",
+          storage: {
+            usedBytes: usedBytes.toString(),
+            limitBytes: limitBytes.toString(),
+            incomingFileBytes: mediaSizeBytes.toString(),
+            projectedUsedBytes: projectedUsedBytes.toString(),
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+    // 5) Create attachment and update user quota in one transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const attachment = await tx.memoryAttachment.create({
+        data: {
+          itemId,
+          type,
+          mediaUrl,
+          mediaPublicId,
+          mediaFileName,
+          mediaMimeType,
+          mediaSizeBytes,
+        },
+        select: {
+          id: true,
+          type: true,
+          mediaUrl: true,
+          mediaPublicId: true,
+          mediaFileName: true,
+          mediaMimeType: true,
+          mediaSizeBytes: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          storageUsedBytes: {
+            increment: mediaSizeBytes,
+          },
+        },
+      });
+
+      return attachment;
     });
 
     return Response.json(
       {
         message: "Attachment added successfully.",
-        attachment,
+        attachment: {
+          ...result,
+          mediaSizeBytes: result.mediaSizeBytes.toString(),
+        },
+        storage: {
+          usedBytes: projectedUsedBytes.toString(),
+          limitBytes: limitBytes.toString(),
+          remainingBytes: (limitBytes - projectedUsedBytes).toString(),
+        },
       },
       { status: 201 }
     );

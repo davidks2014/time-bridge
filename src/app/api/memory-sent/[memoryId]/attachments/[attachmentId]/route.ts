@@ -29,6 +29,7 @@ function inferCloudinaryResourceType(type: "IMAGE" | "VIDEO"): "image" | "video"
  * - memory must not be locked
  * - attachment must belong to an item inside this memory
  * - delete from Cloudinary first, then DB
+ * - decrease user's storageUsedBytes
  */
 export async function DELETE(req: Request, { params }: Params) {
   try {
@@ -41,7 +42,11 @@ export async function DELETE(req: Request, { params }: Params) {
 
     const user = await prisma.user.findUnique({
       where: { email: normalizeEmail(session.user.email) },
-      select: { id: true },
+      select: {
+        id: true,
+        storageUsedBytes: true,
+        storageLimitBytes: true,
+      },
     });
 
     if (!user) {
@@ -106,6 +111,7 @@ export async function DELETE(req: Request, { params }: Params) {
         id: true,
         type: true,
         mediaPublicId: true,
+        mediaSizeBytes: true,
       },
     });
 
@@ -128,14 +134,37 @@ export async function DELETE(req: Request, { params }: Params) {
       );
     }
 
-    // 5) Delete from DB
-    await prisma.memoryAttachment.delete({
-      where: { id: attachment.id },
+    // 5) Delete from DB and decrease quota in one transaction
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.memoryAttachment.delete({
+        where: { id: attachment.id },
+      });
+
+      const currentUsed = BigInt(user.storageUsedBytes);
+      const attachmentBytes = BigInt(attachment.mediaSizeBytes);
+      const nextUsed = currentUsed > attachmentBytes ? currentUsed - attachmentBytes : BigInt(0);
+
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          storageUsedBytes: nextUsed,
+        },
+      });
+
+      return {
+        nextUsed,
+        limitBytes: BigInt(user.storageLimitBytes),
+      };
     });
 
     return Response.json({
       message: "Attachment deleted successfully.",
       attachmentId: attachment.id,
+      storage: {
+        usedBytes: result.nextUsed.toString(),
+        limitBytes: result.limitBytes.toString(),
+        remainingBytes: (result.limitBytes - result.nextUsed).toString(),
+      },
     });
   } catch (err) {
     console.error("DELETE /api/memory-sent/[memoryId]/attachments/[attachmentId] error:", err);
