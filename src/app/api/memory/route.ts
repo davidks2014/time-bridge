@@ -45,6 +45,7 @@ type IncomingAttachment = {
   mediaPublicId: string;
   mediaFileName: string | null;
   mediaMimeType: string | null;
+  mediaSizeBytes: bigint;
 };
 
 function parseAttachments(raw: unknown): IncomingAttachment[] {
@@ -61,6 +62,14 @@ function parseAttachments(raw: unknown): IncomingAttachment[] {
     const mediaFileName = String((item as any)?.mediaFileName ?? "").trim() || null;
     const mediaMimeType = String((item as any)?.mediaMimeType ?? "").trim() || null;
 
+    const rawSize =
+      (item as any)?.mediaSizeBytes ??
+      (item as any)?.bytes ??
+      (item as any)?.originalFileSize ??
+      0;
+
+    const mediaSizeBytes = BigInt(Number(rawSize) || 0);
+
     if (!mediaUrl) {
       throw new Error("ATTACHMENT_MEDIA_URL_REQUIRED");
     }
@@ -69,12 +78,17 @@ function parseAttachments(raw: unknown): IncomingAttachment[] {
       throw new Error("ATTACHMENT_MEDIA_PUBLIC_ID_REQUIRED");
     }
 
+    if (mediaSizeBytes <= BigInt(0)) {
+      throw new Error("ATTACHMENT_MEDIA_SIZE_REQUIRED");
+    }
+
     return {
       type,
       mediaUrl,
       mediaPublicId,
       mediaFileName,
       mediaMimeType,
+      mediaSizeBytes,
     };
   });
 }
@@ -88,7 +102,12 @@ export async function POST(req: Request) {
 
     const me = await prisma.user.findUnique({
       where: { email: normalizeEmail(session.user.email) },
-      select: { id: true, email: true },
+      select: {
+        id: true,
+        email: true,
+        storageUsedBytes: true,
+        storageLimitBytes: true,
+      },
     });
 
     if (!me) {
@@ -131,6 +150,13 @@ export async function POST(req: Request) {
       if (msg === "ATTACHMENT_MEDIA_PUBLIC_ID_REQUIRED") {
         return Response.json(
           { error: "Each attachment requires mediaPublicId." },
+          { status: 400 }
+        );
+      }
+
+      if (msg === "ATTACHMENT_MEDIA_SIZE_REQUIRED") {
+        return Response.json(
+          { error: "Each attachment requires mediaSizeBytes greater than 0." },
           { status: 400 }
         );
       }
@@ -252,6 +278,30 @@ export async function POST(req: Request) {
       receiverId = created.id;
     }
 
+    const totalAttachmentBytes = attachments.reduce(
+      (sum, attachment) => sum + attachment.mediaSizeBytes,
+      BigInt(0)
+    );
+
+    const currentUsedBytes = BigInt(me.storageUsedBytes);
+    const limitBytes = BigInt(me.storageLimitBytes);
+    const projectedUsedBytes = currentUsedBytes + totalAttachmentBytes;
+
+    if (projectedUsedBytes > limitBytes) {
+      return Response.json(
+        {
+          error: "Storage quota exceeded. Please delete some files or upgrade your plan.",
+          storage: {
+            usedBytes: currentUsedBytes.toString(),
+            limitBytes: limitBytes.toString(),
+            incomingFileBytes: totalAttachmentBytes.toString(),
+            projectedUsedBytes: projectedUsedBytes.toString(),
+          },
+        },
+        { status: 400 }
+      );
+    }
+
     const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const memory = await tx.memoryCollection.create({
         data: {
@@ -282,7 +332,17 @@ export async function POST(req: Request) {
             mediaPublicId: attachment.mediaPublicId,
             mediaFileName: attachment.mediaFileName,
             mediaMimeType: attachment.mediaMimeType,
+            mediaSizeBytes: attachment.mediaSizeBytes,
           })),
+        });
+
+        await tx.user.update({
+          where: { id: me.id },
+          data: {
+            storageUsedBytes: {
+              increment: totalAttachmentBytes,
+            },
+          },
         });
       }
 
@@ -291,6 +351,7 @@ export async function POST(req: Request) {
         itemId: item.id,
         itemStatus: item.status,
         attachmentCount: attachments.length,
+        storageUsedBytes: projectedUsedBytes.toString(),
       };
     });
 
@@ -301,6 +362,11 @@ export async function POST(req: Request) {
         itemId: result.itemId,
         itemStatus: result.itemStatus,
         attachmentCount: result.attachmentCount,
+        storage: {
+          usedBytes: projectedUsedBytes.toString(),
+          limitBytes: limitBytes.toString(),
+          remainingBytes: (limitBytes - projectedUsedBytes).toString(),
+        },
       },
       { status: 201 }
     );
