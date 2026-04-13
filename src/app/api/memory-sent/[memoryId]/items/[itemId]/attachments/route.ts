@@ -35,7 +35,7 @@ function normalizeAttachmentType(raw: unknown): AttachmentType {
  * - Only owner can add
  * - Cannot add if item is released
  * - Cannot add if any item in same memory is already released
- * - Increases user's storageUsedBytes
+ * - Increase user's storageUsedBytes
  */
 export async function POST(req: Request, { params }: Params) {
   try {
@@ -126,7 +126,7 @@ export async function POST(req: Request, { params }: Params) {
       );
     }
 
-    // 3) Prevent add if any item in same memory already released (collection lock rule)
+    // 3) Prevent add if any item in same memory already released
     const releasedSibling = await prisma.memoryItem.findFirst({
       where: {
         collectionId: memoryId,
@@ -146,7 +146,7 @@ export async function POST(req: Request, { params }: Params) {
       );
     }
 
-    // 4) Quota check again here (important)
+    // 4) Quota check again here
     const usedBytes = BigInt(user.storageUsedBytes);
     const limitBytes = BigInt(user.storageLimitBytes);
     const projectedUsedBytes = usedBytes + mediaSizeBytes;
@@ -166,7 +166,7 @@ export async function POST(req: Request, { params }: Params) {
       );
     }
 
-    // 5) Create attachment and update user quota in one transaction
+    // 5) Create attachment and update quota in one transaction
     const result = await prisma.$transaction(async (tx) => {
       const attachment = await tx.memoryAttachment.create({
         data: {

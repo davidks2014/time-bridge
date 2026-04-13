@@ -101,7 +101,7 @@ export async function DELETE(req: Request, { params }: Params) {
       );
     }
 
-    // 3) Find attachment and make sure it belongs to that item
+    // 3) Find attachment and ensure it belongs to that item
     const attachment = await prisma.memoryAttachment.findFirst({
       where: {
         id: attachmentId,
