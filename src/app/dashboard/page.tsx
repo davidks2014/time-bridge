@@ -41,6 +41,7 @@ type UploadedAttachment = {
   mediaPublicId: string;
   mediaFileName: string | null;
   mediaMimeType: string | null;
+  mediaSizeBytes: number;
 };
 
 export default function DashboardPage() {
@@ -290,6 +291,7 @@ export default function DashboardPage() {
       mediaPublicId: String(json.mediaPublicId),
       mediaFileName: json.mediaFileName ? String(json.mediaFileName) : file.name,
       mediaMimeType: json.mediaMimeType ? String(json.mediaMimeType) : file.type,
+      mediaSizeBytes: Number(json.bytes ?? json.originalFileSize ?? file.size),
     };
   }
 
