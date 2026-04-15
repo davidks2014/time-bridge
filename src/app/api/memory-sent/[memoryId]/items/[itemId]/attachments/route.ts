@@ -1,8 +1,12 @@
 import { prisma } from "@/lib/prisma";
+import cloudinary from "@/lib/cloudinary";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+const MAX_IMAGE_BYTES = BigInt(10 * 1024 * 1024); // 10MB
+const MAX_VIDEO_BYTES = BigInt(100 * 1024 * 1024); // 100MB
 
 type Params = {
   params: Promise<{
@@ -27,6 +31,30 @@ function normalizeAttachmentType(raw: unknown): AttachmentType {
   throw new Error("INVALID_ATTACHMENT_TYPE");
 }
 
+function validateAttachmentSize(type: AttachmentType, mediaSizeBytes: bigint) {
+  if (type === "IMAGE" && mediaSizeBytes > MAX_IMAGE_BYTES) {
+    throw new Error("IMAGE_TOO_LARGE");
+  }
+
+  if (type === "VIDEO" && mediaSizeBytes > MAX_VIDEO_BYTES) {
+    throw new Error("VIDEO_TOO_LARGE");
+  }
+}
+
+function inferCloudinaryResourceType(type: "IMAGE" | "VIDEO"): "image" | "video" {
+  return type === "VIDEO" ? "video" : "image";
+}
+
+async function cleanupCloudinaryUpload(type: AttachmentType, mediaPublicId: string) {
+  try {
+    await cloudinary.uploader.destroy(mediaPublicId, {
+      resource_type: inferCloudinaryResourceType(type),
+    });
+  } catch (cleanupError) {
+    console.error("Cloudinary cleanup error:", cleanupError);
+  }
+}
+
 /**
  * POST /api/memory-sent/[memoryId]/items/[itemId]/attachments
  *
@@ -36,6 +64,7 @@ function normalizeAttachmentType(raw: unknown): AttachmentType {
  * - Cannot add if item is released
  * - Cannot add if any item in same memory is already released
  * - Increase user's storageUsedBytes
+ * - Backend-enforce max attachment size
  */
 export async function POST(req: Request, { params }: Params) {
   try {
@@ -101,6 +130,29 @@ export async function POST(req: Request, { params }: Params) {
       );
     }
 
+    try {
+      validateAttachmentSize(type, mediaSizeBytes);
+    } catch (e) {
+      // Best-effort cleanup because direct upload may already exist in Cloudinary
+      await cleanupCloudinaryUpload(type, mediaPublicId);
+
+      if ((e as Error).message === "IMAGE_TOO_LARGE") {
+        return Response.json(
+          { error: "Image exceeds maximum allowed size of 10MB." },
+          { status: 400 }
+        );
+      }
+
+      if ((e as Error).message === "VIDEO_TOO_LARGE") {
+        return Response.json(
+          { error: "Video exceeds maximum allowed size of 100MB." },
+          { status: 400 }
+        );
+      }
+
+      throw e;
+    }
+
     // 1) Ensure item belongs to this memory + owner
     const item = await prisma.memoryItem.findFirst({
       where: {
@@ -115,11 +167,16 @@ export async function POST(req: Request, { params }: Params) {
     });
 
     if (!item) {
+      // Cleanup uploaded file because item is invalid
+      await cleanupCloudinaryUpload(type, mediaPublicId);
+
       return Response.json({ error: "Item not found." }, { status: 404 });
     }
 
     // 2) Prevent add if item itself already released
     if (item.status === "RELEASED") {
+      await cleanupCloudinaryUpload(type, mediaPublicId);
+
       return Response.json(
         { error: "This item is already released and cannot accept new attachments." },
         { status: 400 }
@@ -137,6 +194,8 @@ export async function POST(req: Request, { params }: Params) {
     });
 
     if (releasedSibling) {
+      await cleanupCloudinaryUpload(type, mediaPublicId);
+
       return Response.json(
         {
           error:
@@ -152,6 +211,8 @@ export async function POST(req: Request, { params }: Params) {
     const projectedUsedBytes = usedBytes + mediaSizeBytes;
 
     if (projectedUsedBytes > limitBytes) {
+      await cleanupCloudinaryUpload(type, mediaPublicId);
+
       return Response.json(
         {
           error: "Storage quota exceeded. Please delete some files or upgrade your plan.",
@@ -160,6 +221,7 @@ export async function POST(req: Request, { params }: Params) {
             limitBytes: limitBytes.toString(),
             incomingFileBytes: mediaSizeBytes.toString(),
             projectedUsedBytes: projectedUsedBytes.toString(),
+            remainingBytes: (limitBytes > usedBytes ? limitBytes - usedBytes : BigInt(0)).toString(),
           },
         },
         { status: 400 }
