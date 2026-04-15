@@ -13,6 +13,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import cloudinary from "@/lib/cloudinary";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import type { MemoryItemStatus } from "@prisma/client";
@@ -23,6 +24,10 @@ type Params = { params: Promise<{ memoryId: string }> };
 
 function normalizeEmail(raw: string): string {
   return String(raw ?? "").trim().toLowerCase();
+}
+
+function inferCloudinaryResourceType(type: "IMAGE" | "VIDEO"): "image" | "video" {
+  return type === "VIDEO" ? "video" : "image";
 }
 
 /**
@@ -94,6 +99,7 @@ export async function GET(_: Request, { params }: Params) {
                 mediaPublicId: true,
                 mediaFileName: true,
                 mediaMimeType: true,
+                mediaSizeBytes: true,
                 createdAt: true,
                 updatedAt: true,
               },
@@ -111,7 +117,10 @@ export async function GET(_: Request, { params }: Params) {
       ...memory,
       items: memory.items.map((item) => ({
         ...item,
-        attachments: item.attachments ?? [],
+        attachments: (item.attachments ?? []).map((att) => ({
+          ...att,
+          mediaSizeBytes: att.mediaSizeBytes.toString(),
+        })),
         attachmentCount: item.attachments?.length ?? 0,
       })),
     };
@@ -126,6 +135,8 @@ export async function GET(_: Request, { params }: Params) {
 /**
  * DELETE /api/memory-sent/[memoryId]
  * - BLOCK if any item is already RELEASED
+ * - Delete Cloudinary files
+ * - Deduct total attachment bytes from user's storageUsedBytes
  */
 export async function DELETE(_: Request, { params }: Params) {
   try {
@@ -138,7 +149,11 @@ export async function DELETE(_: Request, { params }: Params) {
 
     const user = await prisma.user.findUnique({
       where: { email: normalizeEmail(session.user.email) },
-      select: { id: true },
+      select: {
+        id: true,
+        storageUsedBytes: true,
+        storageLimitBytes: true,
+      },
     });
 
     if (!user) {
@@ -154,7 +169,16 @@ export async function DELETE(_: Request, { params }: Params) {
         id: true,
         items: {
           select: {
+            id: true,
             status: true,
+            attachments: {
+              select: {
+                id: true,
+                type: true,
+                mediaPublicId: true,
+                mediaSizeBytes: true,
+              },
+            },
           },
         },
       },
@@ -181,11 +205,60 @@ export async function DELETE(_: Request, { params }: Params) {
       );
     }
 
-    await prisma.memoryCollection.delete({
-      where: { id: memory.id },
+    const allAttachments = memory.items.flatMap((item) => item.attachments ?? []);
+
+    const totalAttachmentBytes = allAttachments.reduce((sum, attachment) => {
+      return sum + BigInt(attachment.mediaSizeBytes);
+    }, BigInt(0));
+
+    // 1) Delete Cloudinary assets first
+    for (const attachment of allAttachments) {
+      try {
+        const resourceType = inferCloudinaryResourceType(attachment.type);
+        await cloudinary.uploader.destroy(attachment.mediaPublicId, {
+          resource_type: resourceType,
+        });
+      } catch (cloudinaryError) {
+        console.error("Cloudinary delete error while deleting memory:", cloudinaryError);
+        return Response.json(
+          { error: "Failed to delete one or more attachments from Cloudinary." },
+          { status: 500 }
+        );
+      }
+    }
+
+    // 2) Delete memory + adjust storage in one transaction
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.memoryCollection.delete({
+        where: { id: memory.id },
+      });
+
+      const currentUsed = BigInt(user.storageUsedBytes);
+      const nextUsed =
+        currentUsed > totalAttachmentBytes ? currentUsed - totalAttachmentBytes : BigInt(0);
+
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          storageUsedBytes: nextUsed,
+        },
+      });
+
+      return {
+        nextUsed,
+        limitBytes: BigInt(user.storageLimitBytes),
+      };
     });
 
-    return Response.json({ message: "Memory deleted successfully." });
+    return Response.json({
+      message: "Memory deleted successfully.",
+      deletedAttachmentCount: allAttachments.length,
+      storage: {
+        usedBytes: result.nextUsed.toString(),
+        limitBytes: result.limitBytes.toString(),
+        remainingBytes: (result.limitBytes - result.nextUsed).toString(),
+      },
+    });
   } catch (err) {
     console.error("DELETE /api/memory-sent/[memoryId] error:", err);
     return Response.json({ error: "Server error." }, { status: 500 });
