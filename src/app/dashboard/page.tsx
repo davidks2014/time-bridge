@@ -62,6 +62,26 @@ type UploadErrorPayload = {
   };
 };
 
+type SignedUploadResponse = {
+  message: string;
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  folder: string;
+  resourceType: "image" | "video";
+  signature: string;
+  itemType: AttachmentType;
+};
+
+type CloudinaryDirectUploadResponse = {
+  secure_url: string;
+  public_id: string;
+  resource_type: string;
+  original_filename?: string;
+  bytes?: number;
+  format?: string;
+};
+
 function formatBytesToMB(raw: string): string {
   const bytes = Number(raw || "0");
   const mb = bytes / 1024 / 1024;
@@ -78,6 +98,15 @@ function buildQuotaMessage(payload: UploadErrorPayload): string {
     `This upload needs: ${formatBytesToMB(incomingFileBytes)} MB.`,
     "Please delete some attachments before uploading again.",
   ].join(" ");
+}
+
+function buildReleaseDateTime(dateOnly: string, timeOnly: string): string | null {
+  const datePart = dateOnly.trim();
+  const timePart = timeOnly.trim();
+
+  if (!datePart || !timePart) return null;
+
+  return `${datePart}T${timePart}`;
 }
 
 export default function DashboardPage() {
@@ -187,6 +216,10 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
+  const selectedFileNames = useMemo(() => {
+    return selectedFiles.map((file) => file.name);
+  }, [selectedFiles]);
+
   function clearMismatch() {
     setMismatchReceiver(null);
   }
@@ -220,19 +253,6 @@ export default function DashboardPage() {
     setInfo("");
     clearMismatch();
   }
-
-  function buildReleaseDateTime(): string | null {
-    const datePart = releaseDateOnly.trim();
-    const timePart = releaseTimeOnly.trim();
-
-    if (!datePart || !timePart) return null;
-
-    return `${datePart}T${timePart}`;
-  }
-
-  const selectedFileNames = useMemo(() => {
-    return selectedFiles.map((file) => file.name);
-  }, [selectedFiles]);
 
   function inferAttachmentType(file: File): AttachmentType {
     if (file.type.startsWith("image/")) return "IMAGE";
@@ -316,35 +336,65 @@ export default function DashboardPage() {
     }
   }
 
-  async function uploadOneAttachment(file: File): Promise<UploadedAttachment> {
+  async function getSignedUpload(itemType: AttachmentType): Promise<SignedUploadResponse> {
+    const res = await fetch("/api/media/sign", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ itemType }),
+    });
+
+    const json = (await res.json()) as SignedUploadResponse & UploadErrorPayload;
+
+    if (!res.ok) {
+      throw new Error(json?.error ?? "Failed to generate upload signature.");
+    }
+
+    return json;
+  }
+
+  async function uploadDirectToCloudinary(file: File): Promise<UploadedAttachment> {
     const attachmentType = inferAttachmentType(file);
+
+    const signPayload = await getSignedUpload(attachmentType);
 
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("itemType", attachmentType);
+    formData.append("api_key", signPayload.apiKey);
+    formData.append("timestamp", String(signPayload.timestamp));
+    formData.append("folder", signPayload.folder);
+    formData.append("signature", signPayload.signature);
 
-    const res = await fetch("/api/media/upload", {
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${signPayload.cloudName}/${signPayload.resourceType}/upload`;
+
+    const uploadRes = await fetch(uploadUrl, {
       method: "POST",
       body: formData,
     });
 
-    const json = (await res.json()) as UploadErrorPayload & Record<string, unknown>;
+    const uploadJson = (await uploadRes.json()) as
+      | CloudinaryDirectUploadResponse
+      | { error?: { message?: string } };
 
-    if (!res.ok) {
-      if (res.status === 400 && json?.error?.toLowerCase().includes("storage")) {
-        throw new Error(buildQuotaMessage(json));
-      }
+    if (!uploadRes.ok) {
+      const cloudinaryMessage =
+        "error" in uploadJson
+          ? uploadJson.error?.message
+          : "Cloudinary direct upload failed.";
 
-      throw new Error(json?.error ?? `Failed to upload file: ${file.name}`);
+      throw new Error(cloudinaryMessage || "Cloudinary direct upload failed.");
     }
+
+    const successJson = uploadJson as CloudinaryDirectUploadResponse;
 
     return {
       type: attachmentType,
-      mediaUrl: String(json.mediaUrl),
-      mediaPublicId: String(json.mediaPublicId),
-      mediaFileName: json.mediaFileName ? String(json.mediaFileName) : file.name,
-      mediaMimeType: json.mediaMimeType ? String(json.mediaMimeType) : file.type,
-      mediaSizeBytes: Number(json.bytes ?? json.originalFileSize ?? file.size),
+      mediaUrl: String(successJson.secure_url),
+      mediaPublicId: String(successJson.public_id),
+      mediaFileName: file.name ?? null,
+      mediaMimeType: file.type ?? null,
+      mediaSizeBytes: Number(successJson.bytes ?? file.size),
     };
   }
 
@@ -357,7 +407,7 @@ export default function DashboardPage() {
       const uploaded: UploadedAttachment[] = [];
 
       for (const file of selectedFiles) {
-        const result = await uploadOneAttachment(file);
+        const result = await uploadDirectToCloudinary(file);
         uploaded.push(result);
       }
 
@@ -382,7 +432,7 @@ export default function DashboardPage() {
     if (!receiverPhone.trim()) return setError("Receiver phone is required.");
     if (!receiverAddress.trim()) return setError("Receiver address is required.");
 
-    const normalizedReleaseDateTime = buildReleaseDateTime();
+    const normalizedReleaseDateTime = buildReleaseDateTime(releaseDateOnly, releaseTimeOnly);
 
     if (releaseMode === "NOW" && !normalizedReleaseDateTime) {
       return setError("Please choose a release date and time, or select Set Date Later.");
@@ -390,6 +440,21 @@ export default function DashboardPage() {
 
     if (selectedFiles.length > MAX_FILES) {
       return setError(`Maximum ${MAX_FILES} files allowed.`);
+    }
+
+    // Friendly frontend pre-check against remaining quota
+    const remainingBytes = Number(storageRemainingBytes || "0");
+    const selectedTotalBytes = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+
+    if (selectedTotalBytes > remainingBytes) {
+      return setError(
+        [
+          "Storage quota exceeded.",
+          `Remaining storage: ${formatBytesToMB(storageRemainingBytes)} MB.`,
+          `Selected upload size: ${(selectedTotalBytes / 1024 / 1024).toFixed(2)} MB.`,
+          "Please delete some attachments before uploading again.",
+        ].join(" ")
+      );
     }
 
     setLoading(true);
@@ -680,7 +745,7 @@ export default function DashboardPage() {
 
                       {isVideo && (
                         <div style={{ color: "#666", fontSize: 12 }}>
-                          Video selected and will upload to Cloudinary when you create the memory.
+                          Video selected and will upload directly to Cloudinary when you create the memory.
                         </div>
                       )}
 
