@@ -51,10 +51,33 @@ type UploadedAttachment = {
   mediaSizeBytes: number;
 };
 
+type UploadErrorPayload = {
+  error?: string;
+  storage?: {
+    usedBytes?: string;
+    limitBytes?: string;
+    remainingBytes?: string;
+    incomingFileBytes?: string;
+    projectedUsedBytes?: string;
+  };
+};
+
 function formatBytesToMB(raw: string): string {
   const bytes = Number(raw || "0");
   const mb = bytes / 1024 / 1024;
   return mb.toFixed(2);
+}
+
+function buildQuotaMessage(payload: UploadErrorPayload): string {
+  const remainingBytes = String(payload?.storage?.remainingBytes ?? "0");
+  const incomingFileBytes = String(payload?.storage?.incomingFileBytes ?? "0");
+
+  return [
+    payload?.error || "Storage quota exceeded.",
+    `Remaining storage: ${formatBytesToMB(remainingBytes)} MB.`,
+    `This upload needs: ${formatBytesToMB(incomingFileBytes)} MB.`,
+    "Please delete some attachments before uploading again.",
+  ].join(" ");
 }
 
 export default function DashboardPage() {
@@ -235,9 +258,7 @@ export default function DashboardPage() {
       }
 
       const exists = updated.some((f) => f.name === file.name && f.size === file.size);
-      if (exists) {
-        continue;
-      }
+      if (exists) continue;
 
       const isImage = file.type.startsWith("image/");
       const isVideo = file.type.startsWith("video/");
@@ -307,9 +328,13 @@ export default function DashboardPage() {
       body: formData,
     });
 
-    const json = await res.json();
+    const json = (await res.json()) as UploadErrorPayload & Record<string, unknown>;
 
     if (!res.ok) {
+      if (res.status === 400 && json?.error?.toLowerCase().includes("storage")) {
+        throw new Error(buildQuotaMessage(json));
+      }
+
       throw new Error(json?.error ?? `Failed to upload file: ${file.name}`);
     }
 
@@ -401,6 +426,13 @@ export default function DashboardPage() {
       }
 
       if (!res.ok) {
+        if (res.status === 400 && json?.error?.toLowerCase().includes("storage")) {
+          const msg = buildQuotaMessage(json as UploadErrorPayload);
+          setError(msg);
+          await loadStorageSummary();
+          return;
+        }
+
         setError(json?.error ?? "Failed to create memory.");
         return;
       }
@@ -416,6 +448,7 @@ export default function DashboardPage() {
       }, 600);
     } catch (e) {
       setError((e as Error)?.message || "Network error.");
+      await loadStorageSummary();
     } finally {
       setLoading(false);
     }
@@ -586,12 +619,7 @@ export default function DashboardPage() {
 
             <div style={{ fontWeight: 800, marginTop: 8 }}>Attachments (Optional)</div>
 
-            <input
-              type="file"
-              accept="image/*,video/*"
-              multiple
-              onChange={handleFileChange}
-            />
+            <input type="file" accept="image/*,video/*" multiple onChange={handleFileChange} />
 
             {fileError && <div style={{ color: "red", marginTop: 6 }}>{fileError}</div>}
 
