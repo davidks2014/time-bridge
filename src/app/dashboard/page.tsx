@@ -33,6 +33,13 @@ type DashboardSummaryResponse = {
   lastConfirmedAt: string | null;
 };
 
+type StorageSummaryResponse = {
+  storageUsedBytes: string;
+  storageLimitBytes: string;
+  storageRemainingBytes: string;
+  storageUsagePercent: number;
+};
+
 type AttachmentType = "IMAGE" | "VIDEO";
 
 type UploadedAttachment = {
@@ -44,6 +51,12 @@ type UploadedAttachment = {
   mediaSizeBytes: number;
 };
 
+function formatBytesToMB(raw: string): string {
+  const bytes = Number(raw || "0");
+  const mb = bytes / 1024 / 1024;
+  return mb.toFixed(2);
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { status, data: session } = useSession();
@@ -51,6 +64,11 @@ export default function DashboardPage() {
   const [sentCount, setSentCount] = useState<number | null>(null);
   const [receivedCount, setReceivedCount] = useState<number | null>(null);
   const [incomingCount, setIncomingCount] = useState<number | null>(null);
+
+  const [storageUsedBytes, setStorageUsedBytes] = useState<string>("0");
+  const [storageLimitBytes, setStorageLimitBytes] = useState<string>("0");
+  const [storageRemainingBytes, setStorageRemainingBytes] = useState<string>("0");
+  const [storageUsagePercent, setStorageUsagePercent] = useState<number>(0);
 
   const [missedConfirmations, setMissedConfirmations] = useState<number | null>(null);
   const [lastConfirmedAt, setLastConfirmedAt] = useState<string | null>(null);
@@ -124,10 +142,24 @@ export default function DashboardPage() {
     } catch {}
   }
 
+  async function loadStorageSummary() {
+    try {
+      const res = await fetch("/api/storage-summary");
+      const json = (await res.json()) as Partial<StorageSummaryResponse>;
+      if (!res.ok) return;
+
+      setStorageUsedBytes(String(json.storageUsedBytes ?? "0"));
+      setStorageLimitBytes(String(json.storageLimitBytes ?? "0"));
+      setStorageRemainingBytes(String(json.storageRemainingBytes ?? "0"));
+      setStorageUsagePercent(Number(json.storageUsagePercent ?? 0));
+    } catch {}
+  }
+
   useEffect(() => {
     if (status === "authenticated") {
       guardVerification();
       loadSummary();
+      loadStorageSummary();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
@@ -202,9 +234,7 @@ export default function DashboardPage() {
         break;
       }
 
-      const exists = updated.some(
-        (f) => f.name === file.name && f.size === file.size
-      );
+      const exists = updated.some((f) => f.name === file.name && f.size === file.size);
       if (exists) {
         continue;
       }
@@ -236,8 +266,6 @@ export default function DashboardPage() {
     setSelectedFiles(updated);
     setError("");
     setInfo("");
-
-    // allow selecting the same file again later
     e.target.value = "";
   }
 
@@ -381,6 +409,7 @@ export default function DashboardPage() {
       resetMemoryForm();
 
       await loadSummary();
+      await loadStorageSummary();
 
       setTimeout(() => {
         router.push("/memory-sent");
@@ -460,6 +489,47 @@ export default function DashboardPage() {
         </div>
 
         <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 14 }}>
+          <div style={{ fontWeight: 900, fontSize: 16 }}>Storage Usage</div>
+
+          <div style={{ marginTop: 6, color: "#666" }}>
+            Used: <b>{formatBytesToMB(storageUsedBytes)} MB</b>
+          </div>
+
+          <div style={{ marginTop: 6, color: "#666" }}>
+            Remaining: <b>{formatBytesToMB(storageRemainingBytes)} MB</b>
+          </div>
+
+          <div style={{ marginTop: 6, color: "#666" }}>
+            Total Plan: <b>{formatBytesToMB(storageLimitBytes)} MB</b>
+          </div>
+
+          <div style={{ marginTop: 10 }}>
+            <div
+              style={{
+                width: "100%",
+                height: 12,
+                background: "#eee",
+                borderRadius: 999,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.min(storageUsagePercent, 100)}%`,
+                  height: "100%",
+                  background: storageUsagePercent >= 90 ? "#d9534f" : "#4a90e2",
+                  transition: "width 0.2s ease",
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ marginTop: 8, fontSize: 12, color: "#777" }}>
+            {storageUsagePercent}% used of your current storage quota.
+          </div>
+        </div>
+
+        <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 14 }}>
           <div style={{ fontWeight: 900, fontSize: 16 }}>Proof-of-Life</div>
 
           <div style={{ marginTop: 6, color: "#666" }}>
@@ -523,9 +593,7 @@ export default function DashboardPage() {
               onChange={handleFileChange}
             />
 
-            {fileError && (
-              <div style={{ color: "red", marginTop: 6 }}>{fileError}</div>
-            )}
+            {fileError && <div style={{ color: "red", marginTop: 6 }}>{fileError}</div>}
 
             {selectedFileNames.length > 0 && (
               <div
