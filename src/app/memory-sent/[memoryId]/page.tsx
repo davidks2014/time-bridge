@@ -68,6 +68,29 @@ type UploadedAttachment = {
   mediaSizeBytes: number;
 };
 
+type SignedUploadResponse = {
+  message: string;
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  folder: string;
+  resourceType: "image" | "video";
+  signature: string;
+  itemType: AttachmentType;
+};
+
+type CloudinaryDirectUploadResponse = {
+  secure_url: string;
+  public_id: string;
+  resource_type: string;
+  original_filename?: string;
+  bytes?: number;
+  format?: string;
+  error?: {
+    message?: string;
+  };
+};
+
 function splitDateTimeForInput(isoString: string | null): {
   dateOnly: string;
   timeOnly: string;
@@ -291,9 +314,7 @@ export default function MemoryDetailsPage({
         break;
       }
 
-      const exists = updated.some(
-        (f) => f.name === file.name && f.size === file.size
-      );
+      const exists = updated.some((f) => f.name === file.name && f.size === file.size);
       if (exists) continue;
 
       const isImage = file.type.startsWith("image/");
@@ -329,31 +350,63 @@ export default function MemoryDetailsPage({
     setNewEditFileError("");
   }
 
+  async function getSignedUpload(itemType: AttachmentType): Promise<SignedUploadResponse> {
+    const res = await fetch("/api/media/sign", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ itemType }),
+    });
+
+    const json = (await res.json()) as SignedUploadResponse & { error?: string };
+
+    if (!res.ok) {
+      throw new Error(json?.error ?? "Failed to get upload signature.");
+    }
+
+    return json;
+  }
+
   async function uploadOneAttachment(file: File): Promise<UploadedAttachment> {
     const attachmentType = inferAttachmentType(file);
 
+    // Step 1: Get signed upload details from backend
+    const signJson = await getSignedUpload(attachmentType);
+
+    // Step 2: Upload directly to Cloudinary from browser
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("itemType", attachmentType);
+    formData.append("api_key", signJson.apiKey);
+    formData.append("timestamp", signJson.timestamp.toString());
+    formData.append("signature", signJson.signature);
+    formData.append("folder", signJson.folder);
 
-    const res = await fetch("/api/media/upload", {
+    if (signJson.resourceType === "video") {
+      formData.append("resource_type", "video");
+    }
+
+    const uploadUrl = `https://api.cloudinary.com/v1_1/${signJson.cloudName}/${signJson.resourceType}/upload`;
+
+    const uploadRes = await fetch(uploadUrl, {
       method: "POST",
       body: formData,
     });
 
-    const json = await res.json();
+    const uploadJson = (await uploadRes.json()) as CloudinaryDirectUploadResponse;
 
-    if (!res.ok) {
-      throw new Error(json?.error ?? `Failed to upload file: ${file.name}`);
+    if (!uploadRes.ok) {
+      throw new Error(uploadJson?.error?.message ?? "Cloudinary upload failed.");
     }
 
+    // Step 3: Return standardized object for your existing attachment API
     return {
       type: attachmentType,
-      mediaUrl: String(json.mediaUrl),
-      mediaPublicId: String(json.mediaPublicId),
-      mediaFileName: json.mediaFileName ? String(json.mediaFileName) : file.name,
-      mediaMimeType: json.mediaMimeType ? String(json.mediaMimeType) : file.type,
-      mediaSizeBytes: Number(json.bytes ?? json.originalFileSize ?? file.size),
+      mediaUrl: String(uploadJson.secure_url),
+      mediaPublicId: String(uploadJson.public_id),
+      mediaFileName: file.name ?? null,
+      mediaMimeType: file.type ?? null,
+      mediaSizeBytes: Number(uploadJson.bytes ?? file.size),
     };
   }
 
