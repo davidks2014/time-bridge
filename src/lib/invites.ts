@@ -13,6 +13,7 @@
 
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
+import { sendReceiverInviteEmail } from "@/lib/email";
 
 const INVITE_EXPIRE_DAYS = 14;
 
@@ -89,24 +90,15 @@ export async function createOrReuseReceiverInvite(receiverId: string) {
   return { receiver, invite };
 }
 
-/**
- * For MVP delivery simulation:
- * - Later you will integrate Email/SMS/Post providers
- */
-export function logInviteDelivery(receiver: {
-  fullName: string;
-  email: string;
-  phone: string;
-  address: string;
-}, token: string) {
-  const inviteLink = `http://localhost:3000/receiver/invite/${token}`;
-
-  console.log("========================================");
-  console.log("INVITE DELIVERY (MVP SIMULATION)");
-  console.log("Receiver Name   :", receiver.fullName);
-  console.log("Receiver Email  :", receiver.email);
-  console.log("Receiver Phone  :", receiver.phone);
-  console.log("Receiver Address:", receiver.address);
-  console.log("Invite Link     :", inviteLink);
-  console.log("========================================");
+export async function sendInviteDelivery(
+  receiver: { fullName: string; email: string },
+  token: string,
+  senderName: string
+) {
+  await sendReceiverInviteEmail({
+    receiverName: receiver.fullName,
+    receiverEmail: receiver.email,
+    senderName,
+    inviteToken: token,
+  });
 }

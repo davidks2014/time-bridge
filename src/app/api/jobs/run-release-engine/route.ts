@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { createOrReuseReceiverInvite, logInviteDelivery } from "@/lib/invites";
+import { createOrReuseReceiverInvite, sendInviteDelivery } from "@/lib/invites";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +76,9 @@ export async function POST(req: Request) {
       },
       select: {
         id: true,
+        owner: {
+          select: { name: true },
+        },
         collection: {
           select: {
             title: true,
@@ -106,14 +109,10 @@ export async function POST(req: Request) {
       if (invite) {
         invitesCreatedOrReused += 1;
 
-        logInviteDelivery(
-          {
-            fullName: receiver.fullName,
-            email: receiver.email,
-            phone: receiver.phone,
-            address: receiver.address,
-          },
-          invite.token
+        await sendInviteDelivery(
+          receiver,
+          invite.token,
+          item.owner.name
         );
       }
     }
