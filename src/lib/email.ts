@@ -28,11 +28,9 @@ function getResendClient(): Resend {
 }
 
 // ─── Sender address ───────────────────────────────────────────────────────────
-// Must be a verified domain in your Resend account.
-// During development you can use: onboarding@resend.dev (Resend default)
-// For production: noreply@yourdomain.com
-
-const FROM_ADDRESS = "Time Bridge <noreply@yourdomain.com>";
+// Using Resend test address for UAT.
+// For production, replace with a verified domain email like noreply@yourdomain.com
+const FROM_ADDRESS = "Time Bridge <onboarding@resend.dev>";
 
 // ─── App base URL ─────────────────────────────────────────────────────────────
 
