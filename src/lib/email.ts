@@ -19,7 +19,13 @@ import { Resend } from "resend";
 
 // ─── Resend client ────────────────────────────────────────────────────────────
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+function getResendClient(): Resend {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is not set in environment variables.");
+  }
+  return new Resend(apiKey);
+}
 
 // ─── Sender address ───────────────────────────────────────────────────────────
 // Must be a verified domain in your Resend account.
@@ -61,7 +67,7 @@ export async function sendReceiverInviteEmail(
   const claimUrl = `${getAppUrl()}/receiver/invite/${inviteToken}`;
 
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_ADDRESS,
       to: receiverEmail,
       subject: `${senderName} has left you a personal message`,
@@ -175,7 +181,7 @@ export async function sendProofOfLifeReminderEmail(
          to confirm you are well.`;
 
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_ADDRESS,
       to: senderEmail,
       subject,
@@ -274,7 +280,7 @@ export async function sendTrustedContactAlertEmail(
          If they are alive and well, please ask them to log in to Time Bridge immediately.`;
 
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_ADDRESS,
       to: trustedContactEmail,
       subject,
@@ -342,7 +348,7 @@ export async function sendAdminBounceAlertEmail(
     params;
 
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: FROM_ADDRESS,
       to: adminEmail,
       subject: `Time Bridge – delivery failed for ${receiverName}`,
