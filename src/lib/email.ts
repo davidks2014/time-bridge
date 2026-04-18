@@ -389,6 +389,163 @@ export async function sendTrustedContactAlertEmail(
   }
 }
 
+// ─── 5. Guardian notification email ──────────────────────────────────────────
+// Sent when a memory is released and the receiver is a child or unknown.
+// The guardian is a trusted adult nominated by the sender to hold the
+// message safely and deliver it to the child when the time is right.
+// Important: the guardian never sees the memory content — they are
+// only notified that a message exists and told how to claim it on
+// behalf of the receiver.
+
+type SendGuardianNotificationEmailParams = {
+  // The guardian's full name
+  guardianName: string;
+  // The guardian's email address
+  guardianEmail: string;
+  // The sender's full name — so the guardian knows who left the message
+  senderName: string;
+  // The child receiver's full name — so the guardian knows who it is for
+  receiverName: string;
+  // The memory collection title
+  collectionTitle?: string;
+  // The invite token — guardian uses this to claim on behalf of the child
+  inviteToken: string;
+};
+
+export async function sendGuardianNotificationEmail(
+  params: SendGuardianNotificationEmailParams
+): Promise<EmailResult> {
+  const {
+    guardianName,
+    guardianEmail,
+    senderName,
+    receiverName,
+    collectionTitle,
+    inviteToken,
+  } = params;
+
+  // Build the claim URL the guardian will use
+  const claimUrl = `${getAppUrl()}/receiver/invite/${inviteToken}`;
+
+  // Build optional collection title line
+  const collectionLine = collectionTitle
+    ? `<p style="color: #555; line-height: 1.7;">
+         The memory collection is titled: <strong>${collectionTitle}</strong>
+       </p>`
+    : "";
+
+  try {
+    const { data, error } = await getResendClient().emails.send({
+      from: FROM_ADDRESS,
+      to: guardianEmail,
+      subject: `You are holding a legacy message for ${receiverName}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a1a;">
+
+          <div style="background: #f5f3ff; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+            <h2 style="font-size: 22px; font-weight: 500; margin: 0 0 8px 0; color: #3C3489;">
+              A legacy message is waiting
+            </h2>
+            <p style="margin: 0; color: #534AB7; font-size: 14px;">
+              Time Bridge — Legacy message delivery
+            </p>
+          </div>
+
+          <p style="color: #555; line-height: 1.7;">
+            Dear ${guardianName},
+          </p>
+
+          <p style="color: #555; line-height: 1.7;">
+            You have been nominated as the trusted guardian for
+            <strong>${receiverName}</strong> by <strong>${senderName}</strong>.
+          </p>
+
+          <p style="color: #555; line-height: 1.7;">
+            <strong>${senderName}</strong> has left a personal legacy message
+            intended for <strong>${receiverName}</strong>. As the nominated guardian,
+            you are trusted to hold this message safely and share it with
+            <strong>${receiverName}</strong> when the time is right.
+          </p>
+
+          ${collectionLine}
+
+          <div style="
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 24px 0;
+          ">
+            <p style="margin: 0; color: #92400e; font-size: 13px; line-height: 1.7;">
+              <strong>Important:</strong> This message was written privately for
+              <strong>${receiverName}</strong>. As guardian, you will be able to
+              securely hold and eventually transfer it to them. You will need to
+              verify your identity using your Singapore NRIC before accessing
+              the guardian portal.
+            </p>
+          </div>
+
+          <p style="color: #555; line-height: 1.7;">
+            To access the guardian portal and securely hold this message,
+            please click the button below:
+          </p>
+
+          <div style="margin: 32px 0; text-align: center;">
+            <a
+              href="${claimUrl}"
+              style="
+                background-color: #534AB7;
+                color: white;
+                padding: 16px 36px;
+                border-radius: 8px;
+                text-decoration: none;
+                font-weight: 500;
+                font-size: 16px;
+                display: inline-block;
+              "
+            >
+              Access guardian portal
+            </a>
+          </div>
+
+          <p style="color: #888; font-size: 13px; line-height: 1.7;">
+            If the button does not work, copy and paste this link:<br/>
+            <a href="${claimUrl}" style="color: #534AB7; word-break: break-all;">${claimUrl}</a>
+          </p>
+
+          <p style="color: #888; font-size: 13px; line-height: 1.7;">
+            This link will expire in 14 days. If you have any questions or
+            concerns, please contact us at support@yourdomain.com
+          </p>
+
+          <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
+
+          <p style="color: #aaa; font-size: 12px; line-height: 1.7;">
+            Time Bridge — Legacy message delivery service, Singapore.<br/>
+            You are receiving this because ${senderName} nominated you as
+            a trusted guardian for ${receiverName}.<br/>
+            This is an automated message. Please do not reply directly to this email.
+          </p>
+
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error("[email] sendGuardianNotificationEmail failed:", error);
+      return { success: false, error: error.message };
+    }
+
+    console.log("[email] sendGuardianNotificationEmail sent:", data?.id);
+    return { success: true, id: data?.id ?? "" };
+
+  } catch (err) {
+    const message = (err as Error)?.message ?? "Unknown error";
+    console.error("[email] sendGuardianNotificationEmail exception:", message);
+    return { success: false, error: message };
+  }
+}
+
 // ─── 4. Admin bounce alert ────────────────────────────────────────────────────
 // Sent internally to admin when a receiver email could not be delivered.
 
