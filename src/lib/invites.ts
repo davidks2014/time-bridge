@@ -13,7 +13,7 @@
 
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import { sendReceiverInviteEmail } from "@/lib/email";
+import { sendReceiverInviteEmail, sendAdminBounceAlertEmail } from "@/lib/email";
 
 const INVITE_EXPIRE_DAYS = 14;
 
@@ -96,12 +96,16 @@ export async function createOrReuseReceiverInvite(receiverId: string) {
  * Sends the release notification email to a receiver.
  * Called by the release engine after a memory is released.
  *
+ * If the email fails to deliver, an alert is automatically
+ * sent to the admin email so they can follow up manually.
+ *
  * Parameters:
  * - receiver: the receiver's contact details
  * - senderName: the sender's full name to personalise the email
  * - token: the unique invite token for the claim link
  * - collectionTitle: optional — the title of the memory collection
  * - memoryCount: optional — how many memory items are in this release
+ * - memoryId: optional — the collection ID for admin reference
  */
 export async function sendInviteDelivery(
   receiver: {
@@ -109,12 +113,15 @@ export async function sendInviteDelivery(
     email: string;
     phone: string;
     address: string;
+    identificationNo?: string;
   },
   senderName: string,
   token: string,
   collectionTitle?: string,
-  memoryCount?: number
+  memoryCount?: number,
+  memoryId?: string
 ): Promise<void> {
+  // 1) Attempt to send the release notification email to the receiver
   const result = await sendReceiverInviteEmail({
     receiverName: receiver.fullName,
     receiverEmail: receiver.email,
@@ -124,12 +131,37 @@ export async function sendInviteDelivery(
     memoryCount,
   });
 
+  // 2) If delivery failed, alert the admin immediately
+  // so they can follow up via SMS, guardian, or physical visit
   if (!result.success) {
-    // Log the failure — task 1.9 will wire up the bounce alert to admin
     console.error(
       "[invites] Email delivery failed for receiver:",
       receiver.email,
       result.error
     );
+
+    // Get admin email from environment variable
+    // Falls back to a default if not set — should always be set in production
+    const adminEmail = process.env.ADMIN_EMAIL;
+
+    if (adminEmail) {
+      // Send bounce alert to admin with all details needed for follow-up
+      await sendAdminBounceAlertEmail({
+        adminEmail,
+        receiverName: receiver.fullName,
+        receiverEmail: receiver.email,
+        // Use NRIC if available, otherwise show placeholder
+        receiverNric: receiver.identificationNo ?? "not recorded",
+        memoryId: memoryId ?? "unknown",
+      });
+
+      console.log("[invites] Bounce alert sent to admin:", adminEmail);
+    } else {
+      // Log a warning if ADMIN_EMAIL is not configured
+      console.warn(
+        "[invites] ADMIN_EMAIL not set — bounce alert not sent.",
+        "Please add ADMIN_EMAIL to your environment variables."
+      );
+    }
   }
 }

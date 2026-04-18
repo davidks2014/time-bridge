@@ -79,6 +79,7 @@ export async function POST(req: Request) {
         id: true,
         collection: {
           select: {
+            id: true,
             // Collection title to include in the email
             title: true,
             // Sender details to personalise the email
@@ -94,6 +95,8 @@ export async function POST(req: Request) {
                 email: true,
                 phone: true,
                 address: true,
+                // Include NRIC so it appears in the admin bounce alert
+                identificationNo: true,
                 linkedUserId: true,
               },
             },
@@ -123,18 +126,22 @@ export async function POST(req: Request) {
       if (invite) {
         invitesCreatedOrReused += 1;
 
-        // Send the release notification email with full context
+        // Send release notification — if it fails, admin bounce alert is sent automatically
         await sendInviteDelivery(
           {
             fullName: receiver.fullName,
             email: receiver.email,
             phone: receiver.phone,
             address: receiver.address,
+            // Pass NRIC so admin bounce alert includes it for identification
+            identificationNo: receiver.identificationNo,
           },
           senderName,
           invite.token,
           collectionTitle,
-          memoryCount
+          memoryCount,
+          // Pass the collection ID so admin can find the case easily
+          item.collection.id
         );
       }
     }

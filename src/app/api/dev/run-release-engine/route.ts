@@ -127,18 +127,22 @@ export async function POST() {
       if (invite) {
         invitesCreatedOrReused += 1;
 
-        // Send the release notification email with full context
+        // Send release notification — if it fails, admin bounce alert is sent automatically
         await sendInviteDelivery(
           {
             fullName: receiver.fullName,
             email: receiver.email,
             phone: receiver.phone,
             address: receiver.address,
+            // Pass NRIC so admin bounce alert includes it for identification
+            identificationNo: receiver.identificationNo,
           },
           senderName,
           invite.token,
           collectionTitle,
-          memoryCount
+          memoryCount,
+          // Pass the collection ID so admin can find the case easily
+          item.collection.id
         );
       }
     }
