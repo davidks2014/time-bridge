@@ -64,6 +64,75 @@ enum VerificationStatus {
   REJECTED
 }
 
+/**
+ * Proof-of-life stage for the 3-stage escalation system
+ * - NORMAL   : sender is within their confirmation window
+ * - WARNING  : sender is approaching their deadline (day 25-29)
+ * - CRITICAL : sender has missed confirmations, trusted contact alerted
+ */
+enum ProofOfLifeStage {
+  NORMAL
+  WARNING
+  CRITICAL
+}
+
+/**
+ * Receiver type — determines delivery path when memory is released
+ * - ADULT   : receiver is an adult, email delivery direct
+ * - CHILD   : receiver is a child, guardian handles delivery
+ * - UNKNOWN : contact details not yet known, guardian or admin handles
+ */
+enum ReceiverType {
+  ADULT
+  CHILD
+  UNKNOWN
+}
+
+/**
+ * Visit outcome — recorded by admin after each physical visit attempt
+ */
+enum VisitOutcome {
+  DELIVERED_AND_ACKNOWLEDGED
+  LEFT_LETTER_NO_ONE_HOME
+  ADDRESS_NOT_FOUND
+  PERSON_CONFIRMED_NOT_RECEIVER
+  REDIRECTED_TO_GUARDIAN
+  OTHER
+}
+
+/**
+ * Delivery channel used to reach the receiver
+ */
+enum DeliveryChannel {
+  EMAIL
+  SMS
+  GUARDIAN
+  TRUSTED_CONTACT
+  PHYSICAL_VISIT
+  ADMIN
+}
+
+/**
+ * Delivery attempt status
+ */
+enum DeliveryStatus {
+  SENT
+  DELIVERED
+  FAILED
+  BOUNCED
+  PENDING
+}
+
+/**
+ * Consent type — what the user agreed to
+ */
+enum ConsentType {
+  DATA_COLLECTION
+  LEGACY_DELIVERY
+  RECEIVER_CONTACT
+  TERMS_AND_PRIVACY
+}
+
 // =========================================
 // NextAuth Models
 // =========================================
@@ -141,6 +210,36 @@ model User {
   confirmationIntervalDays Int       @default(30)
 
   // =========================================
+  // Proof-of-Life Stage Tracking
+  // =========================================
+  // Tracks which escalation stage the sender is currently in
+  // Updated by the proof-of-life cron job
+  proofOfLifeStage ProofOfLifeStage @default(NORMAL)
+
+  // =========================================
+  // Holiday Snooze
+  // =========================================
+  // If set, proof-of-life checks are paused until this date
+  // Sender can activate this when going on holiday or having a procedure
+  snoozedUntil DateTime?
+
+  // =========================================
+  // Trusted Contact
+  // =========================================
+  // A trusted person who is alerted if sender becomes unresponsive
+  // They help confirm whether sender is alive or has passed
+  // They never see the memory content — only the sender's status
+  trustedContactName  String?
+  trustedContactNric  String?
+  trustedContactEmail String?
+  trustedContactPhone String?
+
+  // =========================================
+  // Consent Records
+  // =========================================
+  consents ConsentRecord[]
+
+  // =========================================
   // Storage Quota System
   // =========================================
   // 50MB free quota by default
@@ -207,6 +306,38 @@ model Receiver {
   phone            String
   address          String
   identificationNo String
+
+  // =========================================
+  // Receiver Type
+  // =========================================
+  // Determines the delivery path when a memory is released
+  // ADULT = direct email delivery
+  // CHILD = guardian handles delivery
+  // UNKNOWN = no contact details yet, guardian or admin handles
+  receiverType ReceiverType @default(ADULT)
+
+  // =========================================
+  // Guardian Details
+  // =========================================
+  // Only required when receiverType is CHILD or UNKNOWN
+  // Guardian is a trusted adult who holds the message for the child
+  // Guardian never sees memory content — they are only a delivery bridge
+  guardianName    String?
+  guardianNric    String?
+  guardianEmail   String?
+  guardianPhone   String?
+  guardianAddress String?
+
+  // =========================================
+  // Visit Logs
+  // =========================================
+  // Physical visit attempts made by admin when digital delivery failed
+  visitLogs VisitLog[]
+
+  // =========================================
+  // Delivery Attempts
+  // =========================================
+  deliveryAttempts DeliveryAttempt[]
 
   // Invitation legacy fields
   inviteToken     String?   @unique
@@ -382,5 +513,127 @@ model IdentityVerificationRequest {
 
   @@index([receiverId])
   @@index([requesterUserId])
+  @@index([status])
+}
+
+// =========================================
+// Visit Log
+// =========================================
+// Records every physical visit attempt made by admin
+// Used when all digital delivery channels have failed
+model VisitLog {
+  id String @id @default(cuid())
+
+  // Which receiver this visit was for
+  receiverId String
+  receiver   Receiver @relation(fields: [receiverId], references: [id], onDelete: Cascade)
+
+  // When the visit was attempted
+  visitDate DateTime
+
+  // What happened during the visit
+  outcome VisitOutcome
+
+  // Optional notes from the admin about the visit
+  adminNotes String?
+
+  // Claim code issued during this visit — receiver uses this to fast-track online claim
+  claimCode          String?   @unique
+  claimCodeExpiresAt DateTime?
+
+  // Which admin conducted the visit
+  conductedBy String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([receiverId])
+}
+
+// =========================================
+// Audit Log
+// =========================================
+// Records every important system action for accountability
+// Critical for a legacy app — we must always know what happened and when
+model AuditLog {
+  id String @id @default(cuid())
+
+  // What action was performed e.g. "MEMORY_RELEASED", "INVITE_SENT", "ADMIN_APPROVED"
+  action String
+
+  // What type of entity was affected e.g. "MemoryItem", "User", "Receiver"
+  entity String
+
+  // The ID of the affected entity
+  entityId String
+
+  // Who performed the action — user ID or "SYSTEM" for automated actions
+  performedBy String
+
+  // Optional JSON details about the action for debugging
+  details String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([performedBy])
+  @@index([createdAt])
+}
+
+// =========================================
+// Consent Record
+// =========================================
+// Stores proof that a user gave explicit consent at a specific time
+// Required for PDPA compliance — we must be able to prove consent was given
+model ConsentRecord {
+  id String @id @default(cuid())
+
+  // Which user gave consent
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // What they consented to
+  consentType ConsentType
+
+  // IP address at time of consent — for legal proof
+  ipAddress String?
+
+  // Exact timestamp of consent — stored separately from createdAt for clarity
+  consentGivenAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([consentType])
+}
+
+// =========================================
+// Delivery Attempt
+// =========================================
+// Tracks every attempt to reach a receiver across all channels
+// Gives admin a clear picture of what has been tried before escalating
+model DeliveryAttempt {
+  id String @id @default(cuid())
+
+  // Which receiver this attempt was for
+  receiverId String
+  receiver   Receiver @relation(fields: [receiverId], references: [id], onDelete: Cascade)
+
+  // Which channel was used
+  channel DeliveryChannel
+
+  // What happened
+  status DeliveryStatus
+
+  // When the attempt was made
+  attemptedAt DateTime @default(now())
+
+  // Optional notes e.g. bounce reason, SMS error code
+  notes String?
+
+  createdAt DateTime @default(now())
+
+  @@index([receiverId])
+  @@index([channel])
   @@index([status])
 }
