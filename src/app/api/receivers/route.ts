@@ -84,15 +84,24 @@ export async function POST(req: Request) {
     const identificationNo = String(body.identificationNo ?? "").trim();
 
     // 4) Validate required fields
-    if (!fullName || !email || !phone || !address || !identificationNo) {
-      return Response.json(
-        {
-          error:
-            "fullName, email, phone, address, identificationNo are required.",
-        },
-        { status: 400 }
-      );
+    // Receiver NRIC is always mandatory — it is the golden key for identity
+    if (!identificationNo) {
+      return Response.json({ error: "Receiver identificationNo is required." }, { status: 400 });
     }
+
+    // Receiver name is mandatory — needed for all delivery channels
+    if (!fullName) {
+      return Response.json({ error: "Receiver fullName is required." }, { status: 400 });
+    }
+
+    // Receiver address is mandatory — needed for physical visit fallback
+    if (!address) {
+      return Response.json({ error: "Receiver address is required." }, { status: 400 });
+    }
+
+    // Receiver email and phone are optional
+    // A baby or young child may not have these yet
+    // If missing, delivery will go through guardian or physical visit
 
     // 5) Prevent duplicate receiver under same owner by identification number
     const existing = await prisma.receiver.findFirst({

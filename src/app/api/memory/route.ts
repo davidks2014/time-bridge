@@ -263,25 +263,24 @@ export async function POST(req: Request) {
       );
     }
 
+    // Receiver NRIC is always mandatory — it is the golden key for identity
+    if (!receiverIdNo) {
+      return Response.json({ error: "Receiver identificationNo is required." }, { status: 400 });
+    }
+
+    // Receiver name is mandatory — needed for all delivery channels
     if (!receiverFullName) {
       return Response.json({ error: "Receiver fullName is required." }, { status: 400 });
     }
 
-    if (!receiverEmail) {
-      return Response.json({ error: "Receiver email is required." }, { status: 400 });
-    }
-
-    if (!receiverPhone) {
-      return Response.json({ error: "Receiver phone is required." }, { status: 400 });
-    }
-
+    // Receiver address is mandatory — needed for physical visit fallback
     if (!receiverAddress) {
       return Response.json({ error: "Receiver address is required." }, { status: 400 });
     }
 
-    if (!receiverIdNo) {
-      return Response.json({ error: "Receiver identificationNo is required." }, { status: 400 });
-    }
+    // Receiver email and phone are optional
+    // A baby or young child may not have these yet
+    // If missing, delivery will go through guardian or physical visit
 
     let releaseDate: Date | null = null;
     try {

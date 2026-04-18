@@ -32,6 +32,22 @@ export async function POST(req: Request) {
     const identificationNo = String(form.get("identificationNo") ?? "").trim();
     const address = String(form.get("address") ?? "").trim();
 
+    // Read trusted contact details
+    // These are mandatory — used for proof-of-life escalation
+    const trustedContactName = String(form.get("trustedContactName") ?? "").trim();
+    const trustedContactNric = String(form.get("trustedContactNric") ?? "").trim();
+    const trustedContactEmail = String(form.get("trustedContactEmail") ?? "").trim();
+    const trustedContactPhone = String(form.get("trustedContactPhone") ?? "").trim();
+
+    // Read proof-of-life interval preference (default 30 days)
+    const confirmationIntervalDays = Number(form.get("confirmationIntervalDays") ?? 30);
+
+    // Read consent flags — all must be "true" for registration to proceed
+    const consentDataCollection = form.get("consentDataCollection") === "true";
+    const consentLegacyDelivery = form.get("consentLegacyDelivery") === "true";
+    const consentReceiverContact = form.get("consentReceiverContact") === "true";
+    const consentTerms = form.get("consentTerms") === "true";
+
     // 2) Read uploaded files
     const idFront = form.get("idFront");
     const idBack = form.get("idBack");
@@ -39,6 +55,30 @@ export async function POST(req: Request) {
     // 3) Validate required text fields
     if (!email || !password || !name || !phoneNumber || !identificationNo || !address) {
       return Response.json({ error: "All fields are required." }, { status: 400 });
+    }
+
+    // Validate trusted contact fields — all mandatory
+    if (!trustedContactName || !trustedContactNric || !trustedContactEmail || !trustedContactPhone) {
+      return Response.json(
+        { error: "All trusted contact fields are required." },
+        { status: 400 }
+      );
+    }
+
+    // Validate all 4 consents — block registration if any is missing
+    if (!consentDataCollection || !consentLegacyDelivery || !consentReceiverContact || !consentTerms) {
+      return Response.json(
+        { error: "All consent checkboxes must be agreed to before registering." },
+        { status: 400 }
+      );
+    }
+
+    // Validate confirmation interval is one of the allowed values
+    if (![30, 60, 90].includes(confirmationIntervalDays)) {
+      return Response.json(
+        { error: "Confirmation interval must be 30, 60, or 90 days." },
+        { status: 400 }
+      );
     }
 
     // 4) Require at least front verification image
@@ -139,16 +179,38 @@ export async function POST(req: Request) {
         identificationNo,
         address,
         verificationDocFrontUrl,
-        verificationDocBackUrl,
+        verificationDocBackUrl: verificationDocBackUrl ?? null,
 
-        // verificationStatus default = PENDING in schema
-        // role default = USER in schema
+        // Save trusted contact details
+        trustedContactName,
+        trustedContactNric,
+        trustedContactEmail,
+        trustedContactPhone,
+
+        // Save proof-of-life interval preference
+        confirmationIntervalDays,
+
+        // verificationStatus defaults to PENDING
+        // role defaults to USER
       },
       select: {
         id: true,
         email: true,
         verificationStatus: true,
       },
+    });
+
+    // Save consent records — one record per consent type
+    // This creates a permanent audit trail for PDPA compliance
+    const ipAddress = req.headers.get("x-forwarded-for") ?? "unknown";
+
+    await prisma.consentRecord.createMany({
+      data: [
+        { userId: user.id, consentType: "DATA_COLLECTION", ipAddress },
+        { userId: user.id, consentType: "LEGACY_DELIVERY", ipAddress },
+        { userId: user.id, consentType: "RECEIVER_CONTACT", ipAddress },
+        { userId: user.id, consentType: "TERMS_AND_PRIVACY", ipAddress },
+      ],
     });
 
     return Response.json(

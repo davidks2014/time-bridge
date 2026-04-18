@@ -428,8 +428,6 @@ export default function DashboardPage() {
 
     if (!receiverIdNo.trim()) return setError("Receiver identification number is required.");
     if (!receiverName.trim()) return setError("Receiver name is required.");
-    if (!receiverEmail.trim()) return setError("Receiver email is required.");
-    if (!receiverPhone.trim()) return setError("Receiver phone is required.");
     if (!receiverAddress.trim()) return setError("Receiver address is required.");
 
     const normalizedReleaseDateTime = buildReleaseDateTime(releaseDateOnly, releaseTimeOnly);
@@ -845,7 +843,7 @@ export default function DashboardPage() {
             />
 
             <input
-              placeholder="Receiver email *"
+              placeholder="Receiver email (optional — required for digital delivery)"
               value={receiverEmail}
               onChange={(e) => {
                 setReceiverEmail(e.target.value);
@@ -853,8 +851,24 @@ export default function DashboardPage() {
               }}
             />
 
+            {/* Warning shown when email is empty — guides sender to complete guardian details */}
+            {!receiverEmail.trim() && (
+              <div style={{
+                padding: "8px 12px",
+                background: "#fffbeb",
+                border: "1px solid #fde68a",
+                borderRadius: 8,
+                color: "#92400e",
+                fontSize: 12,
+                lineHeight: 1.6,
+              }}>
+                No email entered — this memory can only be delivered via guardian
+                or physical visit. Please make sure your guardian details are complete.
+              </div>
+            )}
+
             <input
-              placeholder="Receiver phone *"
+              placeholder="Receiver phone (optional)"
               value={receiverPhone}
               onChange={(e) => {
                 setReceiverPhone(e.target.value);
