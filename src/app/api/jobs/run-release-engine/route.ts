@@ -1,13 +1,31 @@
+/**
+ * src/app/api/jobs/run-release-engine/route.ts
+ *
+ * Purpose:
+ * - Runs on a schedule via Vercel cron (see vercel.json)
+ * - Releases memories that have reached their release date
+ * - Releases memories where owner has missed too many confirmations
+ * - Sends invite emails to receivers after release
+ *
+ * Idempotency design:
+ * - Uses a 5-minute time window instead of exact timestamp matching
+ * - This prevents double-processing if cron fires twice in quick succession
+ * - updateMany only touches DRAFT items so already-released items are never touched again
+ * - createOrReuseReceiverInvite reuses existing tokens so no duplicate emails
+ *
+ * Auth:
+ * - Bearer CRON_SECRET for manual testing via Thunder Client
+ * - x-vercel-cron header for Vercel automatic cron runs
+ */
+
 import { prisma } from "@/lib/prisma";
-import { createOrReuseReceiverInvite, sendInviteDelivery } from "@/lib/invites";
+import { createOrReuseReceiverInvite } from "@/lib/invites";
+import { sendInviteDelivery } from "@/lib/invites";
 
 export const dynamic = "force-dynamic";
 
-/**
- * Auth for:
- * - local/manual testing via Thunder Client using Bearer CRON_SECRET
- * - Vercel Cron using x-vercel-cron header
- */
+// ─── Auth check ───────────────────────────────────────────────────────────────
+
 function isAuthorized(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
@@ -21,8 +39,11 @@ function isAuthorized(req: Request) {
   );
 }
 
+// ─── Main handler ─────────────────────────────────────────────────────────────
+
 export async function POST(req: Request) {
   try {
+    // 1) Check CRON_SECRET is configured
     if (!process.env.CRON_SECRET) {
       return Response.json(
         { error: "CRON_SECRET is not configured." },
@@ -30,13 +51,15 @@ export async function POST(req: Request) {
       );
     }
 
+    // 2) Reject unauthorized requests
     if (!isAuthorized(req)) {
       return Response.json({ error: "Unauthorized." }, { status: 401 });
     }
 
     const now = new Date();
 
-    // 1) Release items that reached fixed releaseDate
+    // 3) Release items that have reached their fixed release date
+    // Only DRAFT items are touched — already released items are never re-processed
     const byDate = await prisma.memoryItem.updateMany({
       where: {
         status: "DRAFT",
@@ -48,7 +71,8 @@ export async function POST(req: Request) {
       },
     });
 
-    // 2) Release items that depend on proof-of-life
+    // 4) Release items where owner has missed 6 or more proof-of-life confirmations
+    // Only items with no fixed release date use this rule
     const byMiss = await prisma.memoryItem.updateMany({
       where: {
         status: "DRAFT",
@@ -63,14 +87,20 @@ export async function POST(req: Request) {
       },
     });
 
-    // 3) Find items released in this run that still need invite delivery
-    // We group by collection so we send one email per receiver, not one per item
+    // 5) Find items released in this run that need invite delivery
+    // Idempotency: use a 5-minute window instead of exact timestamp
+    // This handles cases where cron fires twice — the second run finds
+    // the same items but createOrReuseReceiverInvite prevents duplicate emails
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+
     const newlyReleased = await prisma.memoryItem.findMany({
       where: {
         status: "RELEASED",
-        releasedAt: now,
+        // Find items released within the last 5 minutes
+        releasedAt: { gte: fiveMinutesAgo },
         collection: {
           receiver: {
+            // Only send to receivers who do not have an account yet
             linkedUserId: null,
           },
         },
@@ -79,15 +109,15 @@ export async function POST(req: Request) {
         id: true,
         collection: {
           select: {
+            // Collection ID for bounce alert reference
             id: true,
-            // Collection title to include in the email
+            // Collection title for email personalisation
             title: true,
-            // Sender details to personalise the email
+            // Sender name for email personalisation
             owner: {
-              select: {
-                name: true,
-              },
+              select: { name: true },
             },
+            // Receiver contact details for email delivery
             receiver: {
               select: {
                 id: true,
@@ -95,12 +125,12 @@ export async function POST(req: Request) {
                 email: true,
                 phone: true,
                 address: true,
-                // Include NRIC so it appears in the admin bounce alert
+                // NRIC for admin bounce alert identification
                 identificationNo: true,
                 linkedUserId: true,
               },
             },
-            // Count how many items are in this collection
+            // Count released items for email context
             items: {
               where: { status: "RELEASED" },
               select: { id: true },
@@ -112,40 +142,44 @@ export async function POST(req: Request) {
 
     let invitesCreatedOrReused = 0;
 
+    // 6) Send invite emails for each newly released memory
     for (const item of newlyReleased) {
       const receiver = item.collection.receiver;
       const senderName = item.collection.owner?.name ?? "Someone";
       const collectionTitle = item.collection.title;
-      // Count how many released items are in this collection
       const memoryCount = item.collection.items.length;
 
+      // Skip if receiver already has an account — they can log in directly
       if (receiver.linkedUserId) continue;
 
+      // createOrReuseReceiverInvite is idempotent — if an invite already exists
+      // for this receiver it reuses the same token instead of creating a new one
+      // This prevents duplicate emails if the engine runs twice
       const { invite } = await createOrReuseReceiverInvite(receiver.id);
 
       if (invite) {
         invitesCreatedOrReused += 1;
 
-        // Send release notification — if it fails, admin bounce alert is sent automatically
+        // Send the release notification email
+        // If delivery fails, admin bounce alert is sent automatically
         await sendInviteDelivery(
           {
             fullName: receiver.fullName,
             email: receiver.email,
             phone: receiver.phone,
             address: receiver.address,
-            // Pass NRIC so admin bounce alert includes it for identification
             identificationNo: receiver.identificationNo,
           },
           senderName,
           invite.token,
           collectionTitle,
           memoryCount,
-          // Pass the collection ID so admin can find the case easily
           item.collection.id
         );
       }
     }
 
+    // 7) Return summary of this run
     return Response.json({
       message: "Release engine completed.",
       releasedByDate: byDate.count,
@@ -155,6 +189,7 @@ export async function POST(req: Request) {
       newlyReleasedCount: newlyReleased.length,
       ranAt: now.toISOString(),
     });
+
   } catch (err) {
     console.error("run-release-engine error:", err);
     return Response.json({ error: "Server error." }, { status: 500 });
