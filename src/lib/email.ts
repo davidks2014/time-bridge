@@ -46,23 +46,54 @@ type EmailResult =
   | { success: true; id: string }
   | { success: false; error: string };
 
-// ─── 1. Receiver invite email ─────────────────────────────────────────────────
+// ─── 1. Receiver invite / release notification email ──────────────────────────
 // Sent when a memory is released and the receiver is not yet registered.
-// This is the most important email in the entire app.
+// This is the most important email in the entire app — it may be the first
+// time the receiver hears about Time Bridge, and they may be grieving.
+// The tone must be warm, clear, and trustworthy.
 
 type SendReceiverInviteEmailParams = {
+  // The receiver's full name as recorded by the sender
   receiverName: string;
+  // The receiver's email address
   receiverEmail: string;
+  // The sender's full name — shown in the email so receiver knows who it is from
   senderName: string;
+  // The invite token used to build the claim link
   inviteToken: string;
+  // The memory collection title — gives the receiver context about what to expect
+  collectionTitle?: string;
+  // How many memory items are waiting — e.g. "3 messages are waiting for you"
+  memoryCount?: number;
 };
 
 export async function sendReceiverInviteEmail(
   params: SendReceiverInviteEmailParams
 ): Promise<EmailResult> {
-  const { receiverName, receiverEmail, senderName, inviteToken } = params;
+  const {
+    receiverName,
+    receiverEmail,
+    senderName,
+    inviteToken,
+    collectionTitle,
+    memoryCount,
+  } = params;
 
+  // Build the full claim URL the receiver will click
   const claimUrl = `${getAppUrl()}/receiver/invite/${inviteToken}`;
+
+  // Build a human-readable count string e.g. "1 message" or "3 messages"
+  const countText =
+    memoryCount && memoryCount > 1
+      ? `${memoryCount} personal messages are`
+      : "a personal message is";
+
+  // Build optional collection title line
+  const collectionLine = collectionTitle
+    ? `<p style="color: #555; line-height: 1.7;">
+         The memory collection is titled: <strong>${collectionTitle}</strong>
+       </p>`
+    : "";
 
   try {
     const { data, error } = await getResendClient().emails.send({
@@ -72,33 +103,46 @@ export async function sendReceiverInviteEmail(
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a1a;">
 
-          <h2 style="font-size: 22px; font-weight: 500; margin-bottom: 8px;">
-            A message was left for you
-          </h2>
+          <div style="background: #f0fdf8; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+            <h2 style="font-size: 22px; font-weight: 500; margin: 0 0 8px 0; color: #085041;">
+              A message has been left for you
+            </h2>
+            <p style="margin: 0; color: #0F6E56; font-size: 14px;">
+              Time Bridge — Legacy message delivery
+            </p>
+          </div>
 
           <p style="color: #555; line-height: 1.7;">
             Dear ${receiverName},
           </p>
 
           <p style="color: #555; line-height: 1.7;">
-            Someone you knew – <strong>${senderName}</strong> – entrusted
-            Time Bridge to safely deliver a personal message to you.
-            This message was prepared in advance and is now ready for you to receive.
+            Someone you knew — <strong>${senderName}</strong> —
+            cared enough to prepare something for you in advance.
+            ${countText} now ready and waiting safely for you on Time Bridge.
+          </p>
+
+          ${collectionLine}
+
+          <p style="color: #555; line-height: 1.7;">
+            Time Bridge is a secure legacy message service based in Singapore.
+            <strong>${senderName}</strong> trusted us to deliver this to you
+            at the right time. We take that trust very seriously.
           </p>
 
           <p style="color: #555; line-height: 1.7;">
-            To claim your message, please click the button below.
-            You will be asked to verify your identity before anything is shown to you.
-            This is to ensure your message reaches only you.
+            To receive your message, please click the button below.
+            You will be asked to verify your identity first —
+            this ensures the message reaches only you, as intended.
           </p>
 
-          <div style="margin: 32px 0;">
+          <div style="margin: 32px 0; text-align: center;">
             <a
               href="${claimUrl}"
               style="
                 background-color: #1D9E75;
                 color: white;
-                padding: 14px 28px;
+                padding: 16px 36px;
                 border-radius: 8px;
                 text-decoration: none;
                 font-weight: 500;
@@ -106,25 +150,41 @@ export async function sendReceiverInviteEmail(
                 display: inline-block;
               "
             >
-              Claim your message
+              Claim your message from ${senderName}
             </a>
+          </div>
+
+          <div style="
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 24px 0;
+          ">
+            <p style="margin: 0; color: #92400e; font-size: 13px; line-height: 1.7;">
+              <strong>Please note:</strong> You will need to verify your identity
+              using your Singapore NRIC before the message is shown to you.
+              This protects the privacy of both you and the sender.
+            </p>
           </div>
 
           <p style="color: #888; font-size: 13px; line-height: 1.7;">
             If the button does not work, copy and paste this link into your browser:<br/>
-            <a href="${claimUrl}" style="color: #1D9E75;">${claimUrl}</a>
+            <a href="${claimUrl}" style="color: #1D9E75; word-break: break-all;">${claimUrl}</a>
           </p>
 
           <p style="color: #888; font-size: 13px; line-height: 1.7;">
-            This link will expire in 14 days. If you believe you received this email
-            by mistake, you may safely ignore it. Nothing will happen without your action.
+            This link will expire in 14 days. If you believe you received this
+            email by mistake, you may safely ignore it.
+            Nothing will happen without your action.
           </p>
 
           <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
 
-          <p style="color: #aaa; font-size: 12px;">
-            Time Bridge – Legacy message delivery service, Singapore.<br/>
-            If you have questions, contact us at support@yourdomain.com
+          <p style="color: #aaa; font-size: 12px; line-height: 1.7;">
+            Time Bridge — Legacy message delivery service, Singapore.<br/>
+            If you have questions or concerns, contact us at support@yourdomain.com<br/>
+            This is an automated message. Please do not reply directly to this email.
           </p>
 
         </div>
@@ -138,6 +198,7 @@ export async function sendReceiverInviteEmail(
 
     console.log("[email] sendReceiverInviteEmail sent:", data?.id);
     return { success: true, id: data?.id ?? "" };
+
   } catch (err) {
     const message = (err as Error)?.message ?? "Unknown error";
     console.error("[email] sendReceiverInviteEmail exception:", message);

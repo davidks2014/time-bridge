@@ -80,13 +80,13 @@ export async function POST() {
       },
       select: {
         id: true,
-        owner: {
-          select: { name: true },
-        },
         collection: {
           select: {
             id: true,
             title: true,
+            owner: {
+              select: { name: true },
+            },
             receiver: {
               select: {
                 id: true,
@@ -97,6 +97,10 @@ export async function POST() {
                 identificationNo: true,
                 linkedUserId: true,
               },
+            },
+            items: {
+              where: { status: "RELEASED" },
+              select: { id: true },
             },
           },
         },
@@ -110,6 +114,10 @@ export async function POST() {
 
     for (const item of newlyReleased) {
       const receiver = item.collection.receiver;
+      const senderName = item.collection.owner?.name ?? "Someone";
+      const collectionTitle = item.collection.title;
+      // Count how many released items are in this collection
+      const memoryCount = item.collection.items.length;
 
       // Safety check (should already be null from query filter)
       if (receiver.linkedUserId) continue;
@@ -119,10 +127,18 @@ export async function POST() {
       if (invite) {
         invitesCreatedOrReused += 1;
 
+        // Send the release notification email with full context
         await sendInviteDelivery(
-          receiver,
+          {
+            fullName: receiver.fullName,
+            email: receiver.email,
+            phone: receiver.phone,
+            address: receiver.address,
+          },
+          senderName,
           invite.token,
-          item.owner.name
+          collectionTitle,
+          memoryCount
         );
       }
     }

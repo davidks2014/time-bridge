@@ -90,15 +90,46 @@ export async function createOrReuseReceiverInvite(receiverId: string) {
   return { receiver, invite };
 }
 
+/**
+ * sendInviteDelivery
+ *
+ * Sends the release notification email to a receiver.
+ * Called by the release engine after a memory is released.
+ *
+ * Parameters:
+ * - receiver: the receiver's contact details
+ * - senderName: the sender's full name to personalise the email
+ * - token: the unique invite token for the claim link
+ * - collectionTitle: optional — the title of the memory collection
+ * - memoryCount: optional — how many memory items are in this release
+ */
 export async function sendInviteDelivery(
-  receiver: { fullName: string; email: string },
+  receiver: {
+    fullName: string;
+    email: string;
+    phone: string;
+    address: string;
+  },
+  senderName: string,
   token: string,
-  senderName: string
-) {
-  await sendReceiverInviteEmail({
+  collectionTitle?: string,
+  memoryCount?: number
+): Promise<void> {
+  const result = await sendReceiverInviteEmail({
     receiverName: receiver.fullName,
     receiverEmail: receiver.email,
     senderName,
     inviteToken: token,
+    collectionTitle,
+    memoryCount,
   });
+
+  if (!result.success) {
+    // Log the failure — task 1.9 will wire up the bounce alert to admin
+    console.error(
+      "[invites] Email delivery failed for receiver:",
+      receiver.email,
+      result.error
+    );
+  }
 }

@@ -64,6 +64,7 @@ export async function POST(req: Request) {
     });
 
     // 3) Find items released in this run that still need invite delivery
+    // We group by collection so we send one email per receiver, not one per item
     const newlyReleased = await prisma.memoryItem.findMany({
       where: {
         status: "RELEASED",
@@ -76,12 +77,16 @@ export async function POST(req: Request) {
       },
       select: {
         id: true,
-        owner: {
-          select: { name: true },
-        },
         collection: {
           select: {
+            // Collection title to include in the email
             title: true,
+            // Sender details to personalise the email
+            owner: {
+              select: {
+                name: true,
+              },
+            },
             receiver: {
               select: {
                 id: true,
@@ -92,6 +97,11 @@ export async function POST(req: Request) {
                 linkedUserId: true,
               },
             },
+            // Count how many items are in this collection
+            items: {
+              where: { status: "RELEASED" },
+              select: { id: true },
+            },
           },
         },
       },
@@ -101,6 +111,10 @@ export async function POST(req: Request) {
 
     for (const item of newlyReleased) {
       const receiver = item.collection.receiver;
+      const senderName = item.collection.owner?.name ?? "Someone";
+      const collectionTitle = item.collection.title;
+      // Count how many released items are in this collection
+      const memoryCount = item.collection.items.length;
 
       if (receiver.linkedUserId) continue;
 
@@ -109,10 +123,18 @@ export async function POST(req: Request) {
       if (invite) {
         invitesCreatedOrReused += 1;
 
+        // Send the release notification email with full context
         await sendInviteDelivery(
-          receiver,
+          {
+            fullName: receiver.fullName,
+            email: receiver.email,
+            phone: receiver.phone,
+            address: receiver.address,
+          },
+          senderName,
           invite.token,
-          item.owner.name
+          collectionTitle,
+          memoryCount
         );
       }
     }
