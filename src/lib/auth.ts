@@ -2,6 +2,7 @@
 
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcrypt";
 import { prisma } from "@/lib/prisma";
 
@@ -14,6 +15,14 @@ export const authOptions: NextAuthOptions = {
   },
 
   providers: [
+    // Google OAuth provider
+    // Allows users to sign in with their Google account
+    // New Google users will be prompted to complete their profile after first login
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+    }),
+
     CredentialsProvider({
       name: "Credentials",
       credentials: {
@@ -58,25 +67,100 @@ export const authOptions: NextAuthOptions = {
   ],
 
   callbacks: {
-    async jwt({ token, user }) {
-      // ✅ Only set once at login
-      if (user) {
-        token.id = (user as any).id;
-        token.role = (user as any).role;
-        token.verificationStatus = (user as any).verificationStatus;
+    async signIn({ user, account }) {
+      // Allow credentials login to pass through to the existing logic
+      if (account?.provider === "credentials") {
+        return true;
       }
 
-      return token;
+      // Handle Google login
+      if (account?.provider === "google") {
+        try {
+          const email = user.email?.toLowerCase().trim();
+          if (!email) return false;
+
+          // Check if user already exists in database
+          const existing = await prisma.user.findUnique({
+            where: { email },
+            select: { id: true, verificationStatus: true },
+          });
+
+          if (existing) {
+            // Existing user — allow sign in
+            // They have already been verified previously
+            return true;
+          }
+
+          // New Google user — create a basic account
+          // They will be prompted to complete their profile
+          // (NRIC, address, trusted contact) after first login
+          await prisma.user.create({
+            data: {
+              email,
+              // Use Google display name or fallback to email prefix
+              name: user.name ?? email.split("@")[0],
+              // Google users do not have a password — set empty string
+              // They always log in via Google OAuth
+              passwordHash: "",
+              // These will be completed in profile setup after first login
+              phoneNumber: "",
+              identificationNo: "",
+              address: "",
+              // Google users still need admin verification
+              // unless we later add Singpass which auto-verifies
+              verificationStatus: "PENDING",
+            },
+          });
+
+          return true;
+        } catch (err) {
+          console.error("[auth] Google signIn error:", err);
+          return false;
+        }
+      }
+
+      return false;
     },
 
     async session({ session, token }) {
-      if (session.user) {
-        (session.user as any).id = token.id;
-        (session.user as any).role = token.role;
-        (session.user as any).verificationStatus = token.verificationStatus;
+      // Add user role and verification status to the session
+      // so the frontend can use it for routing decisions
+      if (session.user?.email) {
+        const user = await prisma.user.findUnique({
+          where: { email: session.user.email.toLowerCase() },
+          select: {
+            id: true,
+            role: true,
+            verificationStatus: true,
+            name: true,
+            // Check if profile is complete — Google users may not have filled this yet
+            identificationNo: true,
+            phoneNumber: true,
+            address: true,
+          },
+        });
+
+        if (user) {
+          (session.user as any).id = user.id;
+          (session.user as any).role = user.role;
+          (session.user as any).verificationStatus = user.verificationStatus;
+          // Flag incomplete profile so frontend can redirect to profile setup
+          (session.user as any).profileComplete = !!(
+            user.identificationNo &&
+            user.phoneNumber &&
+            user.address
+          );
+        }
       }
 
       return session;
+    },
+
+    async jwt({ token, user, account }) {
+      if (user) {
+        token.email = user.email;
+      }
+      return token;
     },
   },
 

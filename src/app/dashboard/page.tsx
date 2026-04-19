@@ -539,6 +539,50 @@ export default function DashboardPage() {
 
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>
+
+      {/* Profile incomplete banner — shown when user has not completed NRIC verification */}
+      {/* This guides users to complete their profile before creating memories */}
+      {(session?.user as any)?.profileComplete === false && (
+        <div style={{
+          padding: "14px 16px",
+          background: "#fffbeb",
+          border: "1px solid #fde68a",
+          borderRadius: 12,
+          marginBottom: 16,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 10,
+        }}>
+          <div>
+            <div style={{ fontWeight: 700, color: "#92400e", fontSize: 14 }}>
+              Complete your profile to start creating memories
+            </div>
+            <div style={{ color: "#b45309", fontSize: 13, marginTop: 4 }}>
+              We need your NRIC and a few details to verify your identity.
+              This takes about 2 minutes.
+            </div>
+          </div>
+          <button
+            onClick={() => router.push("/complete-profile")}
+            style={{
+              background: "#d97706",
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              padding: "8px 16px",
+              cursor: "pointer",
+              fontSize: 13,
+              fontWeight: 500,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Complete profile
+          </button>
+        </div>
+      )}
+
       <h1 style={{ fontSize: 26, fontWeight: 800 }}>Dashboard</h1>
 
       <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
