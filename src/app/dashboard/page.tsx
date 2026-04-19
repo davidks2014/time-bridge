@@ -173,10 +173,27 @@ export default function DashboardPage() {
       const json = await res.json();
       if (!res.ok) return;
 
-      const u = json.user as MeUser;
-      if (u?.verificationStatus && u.verificationStatus !== "APPROVED") {
-        router.push("/pending-verification");
+      const u = json.user as MeUser & { identificationNo?: string; phoneNumber?: string; address?: string };
+
+      // If profile is incomplete (no NRIC yet) — redirect to complete profile
+      // This handles Google users who signed up but have not filled in their details
+      if (!u?.identificationNo || !u?.phoneNumber || !u?.address) {
+        router.push("/complete-profile");
+        return;
       }
+
+      // If profile is complete but verification is pending — show pending page
+      if (u?.verificationStatus && u.verificationStatus === "PENDING") {
+        router.push("/pending-verification");
+        return;
+      }
+
+      // If rejected — also show pending page where they can resubmit
+      if (u?.verificationStatus && u.verificationStatus === "REJECTED") {
+        router.push("/pending-verification");
+        return;
+      }
+
     } catch {}
   }
 

@@ -158,10 +158,12 @@ export default function PendingVerificationPage() {
 
   return (
     <div style={{ padding: 20, maxWidth: 760, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 900 }}>Pending Verification</h1>
+      <h1 style={{ fontSize: 24, fontWeight: 900 }}>Awaiting verification</h1>
 
       <div style={{ marginTop: 10, color: "#666" }}>
-        Your account is created successfully, but it requires admin approval before you can access memories.
+        Thank you for completing your profile. Our team is reviewing your
+        identity documents and will approve your account within 1 to 2
+        business days. You will receive an email once approved.
       </div>
 
       <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>

@@ -92,23 +92,22 @@ export const authOptions: NextAuthOptions = {
           }
 
           // New Google user — create a basic account
-          // They will be prompted to complete their profile
-          // (NRIC, address, trusted contact) after first login
+          // Profile is incomplete — they will be guided to complete it
+          // We set APPROVED here so they can access the dashboard immediately
+          // Their profile completion (NRIC, documents) is handled separately
           await prisma.user.create({
             data: {
               email,
-              // Use Google display name or fallback to email prefix
               name: user.name ?? email.split("@")[0],
-              // Google users do not have a password — set empty string
-              // They always log in via Google OAuth
+              // Google users do not have a password
               passwordHash: "",
-              // These will be completed in profile setup after first login
+              // Empty — completed at /complete-profile page
               phoneNumber: "",
               identificationNo: "",
               address: "",
-              // Google users still need admin verification
-              // unless we later add Singpass which auto-verifies
-              verificationStatus: "PENDING",
+              // Allow dashboard access immediately
+              // Profile completion is nudged via the dashboard banner
+              verificationStatus: "APPROVED",
             },
           });
 

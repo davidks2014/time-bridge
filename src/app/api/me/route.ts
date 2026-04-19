@@ -34,6 +34,8 @@ export async function GET() {
         verifiedAt: true,
         rejectReason: true,
         identificationNo: true,
+        phoneNumber: true,
+        address: true,
       },
     });
 
