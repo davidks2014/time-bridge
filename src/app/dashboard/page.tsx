@@ -233,6 +233,35 @@ export default function DashboardPage() {
     setMismatchReceiver(null);
   }
 
+  /**
+   * Detects approximate age from Singapore NRIC
+   * Format: S/T + 2-digit birth year + 5 digits + checksum letter
+   * S prefix = born 1900s, T prefix = born 2000s
+   * Returns age in years, or null if NRIC format is unrecognised
+   */
+  function getAgeFromNric(nric: string): number | null {
+    if (!nric || nric.length < 3) return null;
+
+    const prefix = nric[0].toUpperCase();
+    const yearDigits = nric.substring(1, 3);
+    const yearNum = parseInt(yearDigits, 10);
+
+    if (isNaN(yearNum)) return null;
+
+    let birthYear: number;
+    if (prefix === "S") {
+      birthYear = 1900 + yearNum;
+    } else if (prefix === "T") {
+      birthYear = 2000 + yearNum;
+    } else {
+      // FIN (foreigners) start with F or G — cannot determine age
+      return null;
+    }
+
+    const currentYear = new Date().getFullYear();
+    return currentYear - birthYear;
+  }
+
   function resetReleaseInputs() {
     setReleaseDateOnly("");
     setReleaseTimeOnly("");
@@ -1014,6 +1043,48 @@ export default function DashboardPage() {
                 clearMismatch();
               }}
             />
+
+            {/* Child age detection warning */}
+            {(() => {
+              const age = getAgeFromNric(receiverIdNo);
+              if (age === null || age >= 18) return null;
+              return (
+                <div style={{
+                  padding: "10px 14px",
+                  background: "#f5f3ff",
+                  border: "1px solid #c4b5fd",
+                  borderRadius: 8,
+                  color: "#4c1d95",
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                }}>
+                  This receiver appears to be approximately {age} years old based on their NRIC.
+                  For the best chance of successful delivery, please select{" "}
+                  <strong>Child / Minor</strong> as the receiver type and add a guardian
+                  who can hold this message until the child is ready.
+                  {receiverType !== "CHILD" && (
+                    <div style={{ marginTop: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => setReceiverType("CHILD")}
+                        style={{
+                          background: "#7c3aed",
+                          color: "white",
+                          border: "none",
+                          borderRadius: 6,
+                          padding: "4px 12px",
+                          cursor: "pointer",
+                          fontSize: 12,
+                          fontWeight: 500,
+                        }}
+                      >
+                        Switch to Child / Minor
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Receiver name — always mandatory */}
             <input
