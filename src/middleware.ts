@@ -40,7 +40,8 @@ export default withAuth(
     const isPublicRoute =
       pathname === "/login" ||
       pathname === "/register" ||
-      pathname === "/pending-verification";
+      pathname === "/pending-verification" ||
+      pathname === "/complete-profile";
 
     if (isPublicRoute) {
       // If already logged in and approved/admin, don't let them stay on public pages unnecessarily
@@ -92,9 +93,21 @@ export default withAuth(
       return NextResponse.next();
     }
 
-    // ===== Normal users must be approved =====
+    // ===== Normal users — check verification status =====
     if (verificationStatus !== "APPROVED") {
+      // Allow access to complete-profile page
+      if (pathname === "/complete-profile") {
+        return NextResponse.next();
+      }
       return NextResponse.redirect(new URL("/pending-verification", req.url));
+    }
+
+    // ===== Approved users — check profile completeness =====
+    // Google users may be approved but have incomplete profiles
+    const profileComplete = token?.profileComplete as boolean | undefined;
+
+    if (profileComplete === false && pathname !== "/complete-profile" && pathname !== "/dashboard") {
+      return NextResponse.redirect(new URL("/complete-profile", req.url));
     }
 
     return NextResponse.next();
