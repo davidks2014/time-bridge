@@ -40,32 +40,16 @@ export default withAuth(
     const isPublicRoute =
       pathname === "/login" ||
       pathname === "/register" ||
-      pathname === "/pending-verification" ||
       pathname === "/complete-profile";
 
     if (isPublicRoute) {
-      // If already logged in and approved/admin, don't let them stay on public pages unnecessarily
       if (token) {
-        if (pathname === "/pending-verification") {
-          if (role === "ADMIN") {
-            return NextResponse.redirect(new URL("/admin/verification", req.url));
-          }
-
-          if (verificationStatus === "APPROVED") {
-            return NextResponse.redirect(new URL("/dashboard", req.url));
-          }
-        }
-
         if (pathname === "/login" || pathname === "/register") {
           if (role === "ADMIN") {
             return NextResponse.redirect(new URL("/admin/verification", req.url));
           }
-
-          if (verificationStatus === "APPROVED") {
-            return NextResponse.redirect(new URL("/dashboard", req.url));
-          }
-
-          return NextResponse.redirect(new URL("/pending-verification", req.url));
+          // Logged-in users go to dashboard regardless of status
+          return NextResponse.redirect(new URL("/dashboard", req.url));
         }
       }
 
@@ -93,17 +77,26 @@ export default withAuth(
       return NextResponse.next();
     }
 
-    // ===== Normal users — check verification status =====
-    if (verificationStatus !== "APPROVED") {
-      // Allow access to complete-profile page
-      if (pathname === "/complete-profile") {
-        return NextResponse.next();
+    // ===== Normal users — access control =====
+    // We no longer block dashboard access based on verificationStatus
+    // The dashboard shows appropriate banners based on profile state:
+    // - Yellow banner: profile incomplete → go to /complete-profile
+    // - Blue banner: profile complete, pending admin approval
+    // - No banner: fully approved, full access
+    //
+    // We only block /pending-verification from being accessed
+    // by fully approved users — they should be on the dashboard
+    if (pathname === "/pending-verification") {
+      if (verificationStatus === "APPROVED") {
+        const profileComplete = token?.profileComplete as boolean | undefined;
+        // Only redirect away from pending-verification if profile is complete
+        // and fully approved — otherwise let them stay
+        if (profileComplete !== false) {
+          return NextResponse.redirect(new URL("/dashboard", req.url));
+        }
       }
-      return NextResponse.redirect(new URL("/pending-verification", req.url));
+      return NextResponse.next();
     }
-
-    // Profile completeness is handled via dashboard banner nudge only
-    // We never force redirect — users choose when to complete their profile
 
     return NextResponse.next();
   },
