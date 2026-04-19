@@ -1,67 +1,41 @@
+/**
+ * src/middleware.ts
+ *
+ * Global route protection for Time Bridge.
+ *
+ * New flow (simplified):
+ * - Anyone not logged in → /login
+ * - Logged in ADMIN → /admin/verification
+ * - Logged in USER → dashboard always accessible
+ *   - Profile completeness and verification are handled
+ *     via banners on the dashboard, NOT by middleware redirects
+ *   - Only memory CREATION is blocked until profile is complete
+ *     (enforced at the API level in /api/memory)
+ *
+ * The /pending-verification page is now purely informational.
+ * Users navigate there intentionally after completing their profile.
+ * They are never forced there by middleware.
+ */
+
 import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
 import type { NextRequestWithAuth } from "next-auth/middleware";
 
-/**
- * Global route protection middleware
- *
- * Rules:
- * 1) Public pages:
- *    - /login
- *    - /register
- *    - /pending-verification
- *    - next-auth/api/static files
- *
- * 2) If not logged in:
- *    - redirect to /login
- *
- * 3) If ADMIN:
- *    - allow /admin/verification
- *    - if ADMIN goes to /dashboard, redirect to /admin/verification
- *
- * 4) If normal USER and verificationStatus !== APPROVED:
- *    - block protected pages
- *    - redirect to /pending-verification
- *
- * 5) If APPROVED USER tries to open /pending-verification:
- *    - redirect to /dashboard
- */
-
 export default withAuth(
   function middleware(req: NextRequestWithAuth) {
     const { pathname } = req.nextUrl;
-
     const token = req.nextauth.token;
-    const role = (token?.role as string | undefined) ?? "USER";
-    const verificationStatus =
-      (token?.verificationStatus as string | undefined) ?? "PENDING";
 
-    // ===== Public routes =====
-    const isPublicRoute =
-      pathname === "/login" ||
-      pathname === "/register" ||
-      pathname === "/complete-profile";
-
-    if (isPublicRoute) {
-      if (token) {
-        if (pathname === "/login" || pathname === "/register") {
-          if (role === "ADMIN") {
-            return NextResponse.redirect(new URL("/admin/verification", req.url));
-          }
-          // Logged-in users go to dashboard regardless of status
-          return NextResponse.redirect(new URL("/dashboard", req.url));
-        }
-      }
-
-      return NextResponse.next();
-    }
-
-    // ===== Not logged in =====
+    // ── Not logged in ────────────────────────────────────────────────────────
+    // withAuth already handles this but we add explicit check for clarity
     if (!token) {
       return NextResponse.redirect(new URL("/login", req.url));
     }
 
-    // ===== Admin routes =====
+    const role = (token?.role as string | undefined) ?? "USER";
+
+    // ── Admin routes ─────────────────────────────────────────────────────────
+    // Only admins can access /admin/* pages
     if (pathname.startsWith("/admin")) {
       if (role !== "ADMIN") {
         return NextResponse.redirect(new URL("/dashboard", req.url));
@@ -69,52 +43,36 @@ export default withAuth(
       return NextResponse.next();
     }
 
-    // ===== Admin hitting normal dashboard =====
-    if (role === "ADMIN") {
-      if (pathname === "/dashboard") {
-        return NextResponse.redirect(new URL("/admin/verification", req.url));
-      }
+    // ── Admin visiting dashboard ──────────────────────────────────────────────
+    // Redirect admin to their own panel
+    if (role === "ADMIN" && pathname === "/dashboard") {
+      return NextResponse.redirect(new URL("/admin/verification", req.url));
+    }
+
+    // ── Receiver invite routes ────────────────────────────────────────────────
+    // Always allow these — receiver may not be a registered user
+    if (pathname.startsWith("/receiver")) {
       return NextResponse.next();
     }
 
-    // ===== Normal users — access control =====
-    // We no longer block dashboard access based on verificationStatus
-    // The dashboard shows appropriate banners based on profile state:
-    // - Yellow banner: profile incomplete → go to /complete-profile
-    // - Blue banner: profile complete, pending admin approval
-    // - No banner: fully approved, full access
-    //
-    // We only block /pending-verification from being accessed
-    // by fully approved users — they should be on the dashboard
-    if (pathname === "/pending-verification") {
-      if (verificationStatus === "APPROVED") {
-        const profileComplete = token?.profileComplete as boolean | undefined;
-        // Only redirect away from pending-verification if profile is complete
-        // and fully approved — otherwise let them stay
-        if (profileComplete !== false) {
-          return NextResponse.redirect(new URL("/dashboard", req.url));
-        }
-      }
-      return NextResponse.next();
-    }
-
+    // ── All other logged-in users ─────────────────────────────────────────────
+    // Allow access to everything — dashboard, complete-profile, pending-verification
+    // Profile and verification state are handled via UI banners on the dashboard
+    // Memory creation is blocked at the API level (/api/memory checks profile)
     return NextResponse.next();
   },
   {
     callbacks: {
-      /**
-       * This just checks whether a token exists.
-       * Detailed access rules are handled above.
-       */
+      // Allow the middleware function above to handle all logic
+      // Return true means "run the middleware function"
       authorized: () => true,
     },
   }
 );
 
 /**
- * Matcher:
- * - Protect all app pages
- * - Exclude API routes, Next.js internals, and static files
+ * Apply middleware to all app pages
+ * Exclude API routes, Next.js internals, and static files
  */
 export const config = {
   matcher: [

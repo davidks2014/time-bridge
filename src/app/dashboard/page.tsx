@@ -165,39 +165,14 @@ export default function DashboardPage() {
   }, [status, session, router]);
 
   async function guardVerification() {
+    // Guard function now only redirects admins to their panel
+    // All other users stay on dashboard regardless of verification status
+    // Profile state is shown via banners, not redirects
     try {
-      const role = (session?.user as any)?.role as MeUser["role"] | undefined;
-      if (role === "ADMIN") return;
-
-      const res = await fetch("/api/me");
-      const json = await res.json();
-      if (!res.ok) return;
-
-      const u = json.user as MeUser & { identificationNo?: string; phoneNumber?: string; address?: string };
-
-      // Only redirect to pending-verification if profile is complete
-      // but admin has not approved yet
-      // Do NOT redirect incomplete profiles — they see the dashboard banner instead
-      if (
-        u?.identificationNo &&
-        u?.phoneNumber &&
-        u?.address &&
-        u?.verificationStatus === "PENDING"
-      ) {
-        router.push("/pending-verification");
-        return;
+      const role = (session?.user as any)?.role as string | undefined;
+      if (role === "ADMIN") {
+        router.replace("/admin/verification");
       }
-
-      if (
-        u?.identificationNo &&
-        u?.phoneNumber &&
-        u?.address &&
-        u?.verificationStatus === "REJECTED"
-      ) {
-        router.push("/pending-verification");
-        return;
-      }
-
     } catch {}
   }
 
