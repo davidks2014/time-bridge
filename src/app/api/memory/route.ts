@@ -275,6 +275,12 @@ export async function POST(req: Request) {
     const receiverPhone = String(newReceiver.phone ?? "").trim();
     const receiverAddress = String(newReceiver.address ?? "").trim();
     const receiverIdNo = normalizeIdentificationNo(newReceiver.identificationNo ?? "");
+    const receiverType = String(newReceiver.receiverType ?? "ADULT").toUpperCase();
+    const guardianName = String(newReceiver.guardianName ?? "").trim() || null;
+    const guardianNric = String(newReceiver.guardianNric ?? "").trim() || null;
+    const guardianEmail = String(newReceiver.guardianEmail ?? "").trim() || null;
+    const guardianPhone = String(newReceiver.guardianPhone ?? "").trim() || null;
+    const guardianAddress = String(newReceiver.guardianAddress ?? "").trim() || null;
 
     if (!collectionTitle) {
       return Response.json({ error: "collectionTitle is required." }, { status: 400 });
@@ -375,6 +381,12 @@ export async function POST(req: Request) {
           phone: receiverPhone,
           address: receiverAddress,
           identificationNo: receiverIdNo,
+          receiverType: (receiverType as any) ?? "ADULT",
+          guardianName,
+          guardianNric,
+          guardianEmail,
+          guardianPhone,
+          guardianAddress,
         },
         select: { id: true },
       });
