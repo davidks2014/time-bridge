@@ -144,11 +144,39 @@ export async function POST(req: Request) {
         email: true,
         storageUsedBytes: true,
         storageLimitBytes: true,
+        identificationNo: true,
+        phoneNumber: true,
+        address: true,
+        verificationStatus: true,
       },
     });
 
     if (!me) {
       return Response.json({ error: "User not found." }, { status: 404 });
+    }
+
+    // Block memory creation if profile is incomplete
+    // User must have NRIC, phone, and address filled in
+    if (!me.identificationNo || !me.phoneNumber || !me.address) {
+      return Response.json(
+        {
+          error: "PROFILE_INCOMPLETE",
+          message: "Please complete your profile before creating memories.",
+        },
+        { status: 403 }
+      );
+    }
+
+    // Block memory creation if not yet approved by admin
+    // Covers PENDING and REJECTED statuses
+    if (me.verificationStatus !== "APPROVED") {
+      return Response.json(
+        {
+          error: "NOT_VERIFIED",
+          message: "Your account is pending admin verification. You can create memories once approved.",
+        },
+        { status: 403 }
+      );
     }
 
     const body = await req.json();

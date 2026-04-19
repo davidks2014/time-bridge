@@ -443,6 +443,22 @@ export default function DashboardPage() {
     setInfo("");
     clearMismatch();
 
+    // Check profile completeness before allowing memory creation
+    // This gives a clear friendly message instead of an API error
+    const profileComplete = (session?.user as any)?.profileComplete;
+    const verificationStatus = (session?.user as any)?.verificationStatus;
+
+    if (profileComplete === false) {
+      setError("Please complete your profile before creating memories.");
+      setInfo("INCOMPLETE_PROFILE");
+      return;
+    }
+
+    if (verificationStatus !== "APPROVED") {
+      setError("Your account is pending admin verification. You can create memories once your account is approved.");
+      return;
+    }
+
     if (!collectionTitle.trim()) return setError("Memory title is required.");
     if (!itemTitle.trim()) return setError("Message title is required.");
     if (!itemContent.trim()) return setError("Message content is required.");
@@ -607,9 +623,26 @@ export default function DashboardPage() {
       <h1 style={{ fontSize: 26, fontWeight: 800 }}>Dashboard</h1>
 
       <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-        <button onClick={() => setShowForm((v) => !v)}>
-          {showForm ? "Close Create Memory" : "+ Create Memory"}
-        </button>
+        {/* Only show create memory button if profile is complete */}
+        {(session?.user as any)?.profileComplete !== false ? (
+          <button onClick={() => setShowForm((v) => !v)}>
+            {showForm ? "Cancel" : "Create Memory"}
+          </button>
+        ) : (
+          <button
+            onClick={() => router.push("/complete-profile")}
+            style={{
+              background: "#d97706",
+              color: "white",
+              border: "none",
+              borderRadius: 8,
+              padding: "10px 16px",
+              cursor: "pointer",
+            }}
+          >
+            Complete profile to create memories
+          </button>
+        )}
 
         <button onClick={() => router.push("/receivers")}>Receivers</button>
 
@@ -989,8 +1022,39 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {error && <div style={{ color: "red" }}>{error}</div>}
-            {info && <div style={{ color: "green" }}>{info}</div>}
+            {error && (
+              <div style={{
+                padding: "10px 14px",
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderRadius: 8,
+                color: "#991b1b",
+                fontSize: 13,
+              }}>
+                {error}
+                {/* Show complete profile button when profile is incomplete */}
+                {info === "INCOMPLETE_PROFILE" && (
+                  <div style={{ marginTop: 8 }}>
+                    <button
+                      onClick={() => router.push("/complete-profile")}
+                      style={{
+                        background: "#991b1b",
+                        color: "white",
+                        border: "none",
+                        borderRadius: 6,
+                        padding: "6px 12px",
+                        cursor: "pointer",
+                        fontSize: 12,
+                        fontWeight: 500,
+                      }}
+                    >
+                      Complete profile now
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            {info && info !== "INCOMPLETE_PROFILE" && <div style={{ color: "green" }}>{info}</div>}
 
             <button onClick={createMemory} disabled={loading || uploadingMedia}>
               {loading ? "Creating..." : uploadingMedia ? "Uploading attachments..." : "Create Memory"}
