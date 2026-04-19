@@ -658,6 +658,10 @@ export default function DashboardPage() {
 
         <button onClick={() => router.push("/receivers")}>Receivers</button>
 
+        <button onClick={() => router.push("/profile")}>
+          Profile & Settings
+        </button>
+
         <button style={{ marginLeft: "auto" }} onClick={() => signOut({ callbackUrl: "/login" })}>
           Logout
         </button>
