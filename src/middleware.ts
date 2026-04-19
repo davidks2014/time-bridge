@@ -102,13 +102,8 @@ export default withAuth(
       return NextResponse.redirect(new URL("/pending-verification", req.url));
     }
 
-    // ===== Approved users — check profile completeness =====
-    // Google users may be approved but have incomplete profiles
-    const profileComplete = token?.profileComplete as boolean | undefined;
-
-    if (profileComplete === false && pathname !== "/complete-profile" && pathname !== "/dashboard") {
-      return NextResponse.redirect(new URL("/complete-profile", req.url));
-    }
+    // Profile completeness is handled via dashboard banner nudge only
+    // We never force redirect — users choose when to complete their profile
 
     return NextResponse.next();
   },
