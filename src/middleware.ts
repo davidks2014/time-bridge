@@ -3,77 +3,69 @@
  *
  * Global route protection for Time Bridge.
  *
- * New flow (simplified):
- * - Anyone not logged in → /login
- * - Logged in ADMIN → /admin/verification
- * - Logged in USER → dashboard always accessible
- *   - Profile completeness and verification are handled
- *     via banners on the dashboard, NOT by middleware redirects
- *   - Only memory CREATION is blocked until profile is complete
- *     (enforced at the API level in /api/memory)
- *
- * The /pending-verification page is now purely informational.
- * Users navigate there intentionally after completing their profile.
- * They are never forced there by middleware.
+ * Simplified rules:
+ * 1. Public routes — always accessible without login
+ * 2. Not logged in + protected route → redirect to /login
+ * 3. Admin → redirect to /admin/verification when hitting /dashboard
+ * 4. All other logged-in users → allow everything
+ *    Profile and verification shown as UI banners, not middleware redirects
+ *    Memory creation blocked at API level only
  */
 
-import { withAuth } from "next-auth/middleware";
+import { getToken } from "next-auth/jwt";
 import { NextResponse } from "next/server";
-import type { NextRequestWithAuth } from "next-auth/middleware";
+import type { NextRequest } from "next/server";
 
-export default withAuth(
-  function middleware(req: NextRequestWithAuth) {
-    const { pathname } = req.nextUrl;
-    const token = req.nextauth.token;
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
 
-    // ── Not logged in ────────────────────────────────────────────────────────
-    // withAuth already handles this but we add explicit check for clarity
-    if (!token) {
-      return NextResponse.redirect(new URL("/login", req.url));
-    }
+  // ── Always public — no auth needed ───────────────────────────────────────
+  const publicRoutes = [
+    "/login",
+    "/register",
+    "/pending-verification",
+    "/complete-profile",
+  ];
 
-    const role = (token?.role as string | undefined) ?? "USER";
-
-    // ── Admin routes ─────────────────────────────────────────────────────────
-    // Only admins can access /admin/* pages
-    if (pathname.startsWith("/admin")) {
-      if (role !== "ADMIN") {
-        return NextResponse.redirect(new URL("/dashboard", req.url));
-      }
-      return NextResponse.next();
-    }
-
-    // ── Admin visiting dashboard ──────────────────────────────────────────────
-    // Redirect admin to their own panel
-    if (role === "ADMIN" && pathname === "/dashboard") {
-      return NextResponse.redirect(new URL("/admin/verification", req.url));
-    }
-
-    // ── Receiver invite routes ────────────────────────────────────────────────
-    // Always allow these — receiver may not be a registered user
-    if (pathname.startsWith("/receiver")) {
-      return NextResponse.next();
-    }
-
-    // ── All other logged-in users ─────────────────────────────────────────────
-    // Allow access to everything — dashboard, complete-profile, pending-verification
-    // Profile and verification state are handled via UI banners on the dashboard
-    // Memory creation is blocked at the API level (/api/memory checks profile)
+  // Also allow receiver invite routes publicly
+  if (
+    publicRoutes.includes(pathname) ||
+    pathname.startsWith("/receiver")
+  ) {
     return NextResponse.next();
-  },
-  {
-    callbacks: {
-      // Allow the middleware function above to handle all logic
-      // Return true means "run the middleware function"
-      authorized: () => true,
-    },
   }
-);
 
-/**
- * Apply middleware to all app pages
- * Exclude API routes, Next.js internals, and static files
- */
+  // ── Get JWT token ─────────────────────────────────────────────────────────
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+  });
+
+  // ── Not logged in → redirect to login ────────────────────────────────────
+  if (!token) {
+    const loginUrl = new URL("/login", req.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  const role = (token?.role as string | undefined) ?? "USER";
+
+  // ── Admin routes — only admins allowed ───────────────────────────────────
+  if (pathname.startsWith("/admin")) {
+    if (role !== "ADMIN") {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+    return NextResponse.next();
+  }
+
+  // ── Admin on dashboard → send to admin panel ─────────────────────────────
+  if (role === "ADMIN" && pathname === "/dashboard") {
+    return NextResponse.redirect(new URL("/admin/verification", req.url));
+  }
+
+  // ── All other logged-in users → allow ────────────────────────────────────
+  return NextResponse.next();
+}
+
 export const config = {
   matcher: [
     "/((?!api|_next/static|_next/image|favicon.ico|uploads|.*\\..*).*)",
