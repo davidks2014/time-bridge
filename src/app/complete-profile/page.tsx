@@ -89,8 +89,14 @@ export default function CompleteProfilePage() {
         return;
       }
 
-      setInfo("Profile completed. Awaiting admin verification. Redirecting...");
-      setTimeout(() => router.push("/pending-verification"), 1200);
+      setInfo("Profile completed successfully. Redirecting...");
+
+      // Force session refresh so the JWT token picks up the new profile data
+      // Without this, the dashboard still shows the old incomplete state
+      await fetch("/api/auth/session?update", { method: "GET" });
+
+      // Small delay to allow session to refresh
+      setTimeout(() => router.push("/pending-verification"), 1500);
 
     } catch {
       setError("Network error. Please try again.");

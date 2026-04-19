@@ -577,8 +577,7 @@ export default function DashboardPage() {
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>
 
-      {/* Profile incomplete banner — shown when user has not completed NRIC verification */}
-      {/* This guides users to complete their profile before creating memories */}
+      {/* Profile incomplete — user needs to complete their profile */}
       {(session?.user as any)?.profileComplete === false && (
         <div style={{
           padding: "14px 16px",
@@ -617,6 +616,44 @@ export default function DashboardPage() {
           >
             Complete profile
           </button>
+        </div>
+      )}
+
+      {/* Profile complete but pending admin verification */}
+      {(session?.user as any)?.profileComplete !== false &&
+        (session?.user as any)?.verificationStatus === "PENDING" && (
+        <div style={{
+          padding: "14px 16px",
+          background: "#eff6ff",
+          border: "1px solid #bfdbfe",
+          borderRadius: 12,
+          marginBottom: 16,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: 10,
+        }}>
+          <div>
+            <div style={{ fontWeight: 700, color: "#1e40af", fontSize: 14 }}>
+              Awaiting admin verification
+            </div>
+            <div style={{ color: "#1d4ed8", fontSize: 13, marginTop: 4 }}>
+              Your profile is complete. Our team is reviewing your identity
+              documents and will approve your account within 1 to 2 business days.
+            </div>
+          </div>
+          <div style={{
+            background: "#dbeafe",
+            color: "#1e40af",
+            borderRadius: 8,
+            padding: "8px 16px",
+            fontSize: 13,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+          }}>
+            Under review
+          </div>
         </div>
       )}
 

@@ -155,40 +155,37 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
 
-    async jwt({ token, user, account, trigger }) {
-      // On initial sign in, attach user details to the token
+    async jwt({ token, user }) {
+      // On initial sign in, attach basic user details to the token
       if (user) {
         token.email = user.email;
         token.role = (user as any).role;
         token.verificationStatus = (user as any).verificationStatus;
       }
 
-      // For Google users, fetch fresh data from DB each time
-      // This ensures the token reflects the latest verificationStatus
-      // after they complete their profile
-      if (account?.provider === "google" || trigger === "update") {
-        if (token.email) {
-          const dbUser = await prisma.user.findUnique({
-            where: { email: String(token.email).toLowerCase() },
-            select: {
-              role: true,
-              verificationStatus: true,
-              identificationNo: true,
-              phoneNumber: true,
-              address: true,
-            },
-          });
+      // Always fetch fresh profile data from database
+      // This ensures session reflects latest state after profile completion
+      if (token.email) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: String(token.email).toLowerCase() },
+          select: {
+            role: true,
+            verificationStatus: true,
+            identificationNo: true,
+            phoneNumber: true,
+            address: true,
+          },
+        });
 
-          if (dbUser) {
-            token.role = dbUser.role;
-            token.verificationStatus = dbUser.verificationStatus;
-            // Store profileComplete in token so middleware can use it
-            token.profileComplete = !!(
-              dbUser.identificationNo &&
-              dbUser.phoneNumber &&
-              dbUser.address
-            );
-          }
+        if (dbUser) {
+          token.role = dbUser.role;
+          token.verificationStatus = dbUser.verificationStatus;
+          // profileComplete is true only when all three fields are filled
+          token.profileComplete = !!(
+            dbUser.identificationNo &&
+            dbUser.phoneNumber &&
+            dbUser.address
+          );
         }
       }
 
