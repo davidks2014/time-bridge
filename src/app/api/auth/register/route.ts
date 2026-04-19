@@ -69,9 +69,10 @@ export async function POST(req: Request) {
         phoneNumber: "",
         identificationNo: "",
         address: "",
-        // New users start as PENDING — they complete verification
-        // when they try to create their first memory
-        verificationStatus: "PENDING",
+        // Set APPROVED immediately so user can access the dashboard
+        // Identity verification (NRIC, documents) is collected when they
+        // try to create their first memory via the complete-profile flow
+        verificationStatus: "APPROVED",
       },
       select: {
         id: true,
