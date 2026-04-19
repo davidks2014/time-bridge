@@ -1000,7 +1000,7 @@ export default function DashboardPage() {
                     checked={receiverType === type}
                     onChange={() => setReceiverType(type)}
                   />
-                  {type === "ADULT" ? "Adult" : type === "CHILD" ? "Child / Minor" : "Unknown / No contact yet"}
+                  {type === "ADULT" ? "Adult" : type === "CHILD" ? "Child / Minor" : "No contact details yet"}
                 </label>
               ))}
             </div>
@@ -1090,7 +1090,7 @@ export default function DashboardPage() {
                 <div style={{ fontSize: 12, color: "#6d28d9", marginBottom: 10, lineHeight: 1.6 }}>
                   {receiverType === "CHILD"
                     ? "The guardian is a trusted adult who will hold this message safely and deliver it to the child when the time is right. The guardian never sees the message content — they are only a trusted bridge."
-                    : "Since no contact details are available yet, a guardian will receive the notification and help deliver the message when the receiver is found."}
+                    : "You do not have the receiver's contact details yet. A guardian will receive the notification on your behalf and help deliver the message when the receiver is found. You can update the receiver's details later in your profile."}
                 </div>
 
                 <div style={{ display: "grid", gap: 8 }}>
