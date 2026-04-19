@@ -620,3 +620,196 @@ export async function sendAdminBounceAlertEmail(
     return { success: false, error: message };
   }
 }
+
+// ─── 6. Verification approved email ──────────────────────────────────────────
+
+type SendVerificationApprovedEmailParams = {
+  userName: string;
+  userEmail: string;
+};
+
+export async function sendVerificationApprovedEmail(
+  params: SendVerificationApprovedEmailParams
+): Promise<EmailResult> {
+  const { userName, userEmail } = params;
+  const dashboardUrl = `${getAppUrl()}/dashboard`;
+
+  try {
+    const { data, error } = await getResendClient().emails.send({
+      from: FROM_ADDRESS,
+      to: userEmail,
+      subject: "Your Time Bridge account has been verified",
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a1a;">
+
+          <div style="background: #f0fdf8; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+            <h2 style="font-size: 22px; font-weight: 500; margin: 0 0 8px 0; color: #085041;">
+              Your account is verified
+            </h2>
+            <p style="margin: 0; color: #0F6E56; font-size: 14px;">
+              Time Bridge — Legacy message delivery
+            </p>
+          </div>
+
+          <p style="color: #555; line-height: 1.7;">
+            Dear ${userName},
+          </p>
+
+          <p style="color: #555; line-height: 1.7;">
+            Great news — your identity has been verified and your
+            Time Bridge account is now fully active.
+            You can now create legacy messages for your loved ones.
+          </p>
+
+          <div style="margin: 32px 0; text-align: center;">
+            <a
+              href="${dashboardUrl}"
+              style="
+                background-color: #1D9E75;
+                color: white;
+                padding: 16px 36px;
+                border-radius: 8px;
+                text-decoration: none;
+                font-weight: 500;
+                font-size: 16px;
+                display: inline-block;
+              "
+            >
+              Go to my dashboard
+            </a>
+          </div>
+
+          <p style="color: #888; font-size: 13px; line-height: 1.7;">
+            Thank you for trusting Time Bridge with something so important.
+            Your messages will be kept safe until the time comes to deliver them.
+          </p>
+
+          <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
+
+          <p style="color: #aaa; font-size: 12px;">
+            Time Bridge — Legacy message delivery service, Singapore.<br/>
+            If you have questions, contact us at support@yourdomain.com
+          </p>
+
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error("[email] sendVerificationApprovedEmail failed:", error);
+      return { success: false, error: error.message };
+    }
+
+    console.log("[email] sendVerificationApprovedEmail sent:", data?.id);
+    return { success: true, id: data?.id ?? "" };
+
+  } catch (err) {
+    const message = (err as Error)?.message ?? "Unknown error";
+    console.error("[email] sendVerificationApprovedEmail exception:", message);
+    return { success: false, error: message };
+  }
+}
+
+// ─── 7. Verification rejected email ──────────────────────────────────────────
+
+type SendVerificationRejectedEmailParams = {
+  userName: string;
+  userEmail: string;
+  rejectReason: string;
+};
+
+export async function sendVerificationRejectedEmail(
+  params: SendVerificationRejectedEmailParams
+): Promise<EmailResult> {
+  const { userName, userEmail, rejectReason } = params;
+  const resubmitUrl = `${getAppUrl()}/pending-verification`;
+
+  try {
+    const { data, error } = await getResendClient().emails.send({
+      from: FROM_ADDRESS,
+      to: userEmail,
+      subject: "Action required — Time Bridge verification",
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a1a;">
+
+          <div style="background: #fef2f2; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+            <h2 style="font-size: 22px; font-weight: 500; margin: 0 0 8px 0; color: #991b1b;">
+              Verification requires attention
+            </h2>
+            <p style="margin: 0; color: #b91c1c; font-size: 14px;">
+              Time Bridge — Legacy message delivery
+            </p>
+          </div>
+
+          <p style="color: #555; line-height: 1.7;">
+            Dear ${userName},
+          </p>
+
+          <p style="color: #555; line-height: 1.7;">
+            We were unable to verify your identity with the documents provided.
+            Please review the reason below and resubmit with updated documents.
+          </p>
+
+          <div style="
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 24px 0;
+          ">
+            <p style="margin: 0; color: #991b1b; font-size: 13px; font-weight: 500;">
+              Reason:
+            </p>
+            <p style="margin: 8px 0 0 0; color: #7f1d1d; font-size: 13px; line-height: 1.7;">
+              ${rejectReason}
+            </p>
+          </div>
+
+          <p style="color: #555; line-height: 1.7;">
+            Please log in and resubmit your verification documents.
+            Make sure your ID photo is clear, well-lit, and shows all four corners.
+          </p>
+
+          <div style="margin: 32px 0; text-align: center;">
+            <a
+              href="${resubmitUrl}"
+              style="
+                background-color: #dc2626;
+                color: white;
+                padding: 16px 36px;
+                border-radius: 8px;
+                text-decoration: none;
+                font-weight: 500;
+                font-size: 16px;
+                display: inline-block;
+              "
+            >
+              Resubmit my documents
+            </a>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
+
+          <p style="color: #aaa; font-size: 12px;">
+            Time Bridge — Legacy message delivery service, Singapore.<br/>
+            If you have questions, contact us at support@yourdomain.com
+          </p>
+
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error("[email] sendVerificationRejectedEmail failed:", error);
+      return { success: false, error: error.message };
+    }
+
+    console.log("[email] sendVerificationRejectedEmail sent:", data?.id);
+    return { success: true, id: data?.id ?? "" };
+
+  } catch (err) {
+    const message = (err as Error)?.message ?? "Unknown error";
+    console.error("[email] sendVerificationRejectedEmail exception:", message);
+    return { success: false, error: message };
+  }
+}

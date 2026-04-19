@@ -20,6 +20,10 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { VerificationStatus } from "@prisma/client";
+import {
+  sendVerificationApprovedEmail,
+  sendVerificationRejectedEmail,
+} from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -87,10 +91,20 @@ export async function POST(req: Request) {
         select: {
           id: true,
           email: true,
+          name: true,
           verificationStatus: true,
           verifiedAt: true,
         },
       });
+
+      // Send approval notification email to the user
+      // Non-blocking — if email fails, approval still succeeds
+      sendVerificationApprovedEmail({
+        userName: updated.name ?? "there",
+        userEmail: updated.email,
+      }).catch((err) =>
+        console.error("[decision] Failed to send approval email:", err)
+      );
 
       return Response.json({ message: "User approved.", user: updated });
     }
@@ -110,10 +124,21 @@ export async function POST(req: Request) {
       select: {
         id: true,
         email: true,
+        name: true,
         verificationStatus: true,
         rejectReason: true,
       },
     });
+
+    // Send rejection notification email with the reason
+    // Non-blocking — if email fails, rejection still succeeds
+    sendVerificationRejectedEmail({
+      userName: updated.name ?? "there",
+      userEmail: updated.email,
+      rejectReason,
+    }).catch((err) =>
+      console.error("[decision] Failed to send rejection email:", err)
+    );
 
     return Response.json({ message: "User rejected.", user: updated });
   } catch (err) {
