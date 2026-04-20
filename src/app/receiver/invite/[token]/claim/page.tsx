@@ -19,6 +19,8 @@ type InvitePayload = {
   receiverName: string | null;
   senderName: string | null;
   senderEmail: string | null;
+  // Whether the receiver already has a Time Bridge account
+  hasExistingAccount: boolean;
 };
 
 export default function InviteClaimPage({
@@ -230,7 +232,49 @@ export default function InviteClaimPage({
         </button>
       </div>
 
-      {/* Claim form */}
+      {/* Existing account detected — show login prompt */}
+      {invite && invite.hasExistingAccount ? (
+        <div style={{ marginTop: 24, display: "grid", gap: 12 }}>
+          <div style={{ fontWeight: 900, fontSize: 15 }}>
+            You already have a Time Bridge account
+          </div>
+          <div style={{
+            padding: "12px 16px",
+            background: "#eff6ff",
+            border: "1px solid #bfdbfe",
+            borderRadius: 8,
+            color: "#1e40af",
+            fontSize: 13,
+            lineHeight: 1.6,
+          }}>
+            We found an existing account for <b>{invite.receiverEmail}</b>.
+            Please log in to automatically claim this memory — no need to
+            create a new account.
+          </div>
+
+          <button
+            onClick={() => router.push(
+              `/login?callbackUrl=/receiver/invite/${token}/link`
+            )}
+          >
+            Log in to claim my memory
+          </button>
+
+          <div style={{ fontSize: 12, color: "#999", textAlign: "center" }}>
+            Using a different email?{" "}
+            <span
+              style={{ color: "#1D9E75", cursor: "pointer", textDecoration: "underline" }}
+              onClick={() => {
+                if (invite) {
+                  setInvite({ ...invite, hasExistingAccount: false });
+                }
+              }}
+            >
+              Create a new account instead
+            </span>
+          </div>
+        </div>
+      ) : (
       <div style={{ marginTop: 24, display: "grid", gap: 12 }}>
         <div style={{ fontWeight: 900, fontSize: 15 }}>Create your account</div>
         <div style={{ fontSize: 13, color: "#666", lineHeight: 1.6 }}>
@@ -367,6 +411,8 @@ export default function InviteClaimPage({
           {submitting ? "Submitting..." : "Claim my memory"}
         </button>
       </div>
+
+      )}
     </div>
   );
 }

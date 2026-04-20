@@ -53,14 +53,22 @@ export async function GET(_: Request, { params }: Params) {
       return Response.json({ error: "Invite already used." }, { status: 400 });
     }
 
-    // 5) Return data for UI page
+    // 5) Check if receiver email already has a registered account
+    // This determines which flow to show — login or register
+    const existingAccount = await prisma.user.findUnique({
+      where: { email: invite.receiverEmail.toLowerCase() },
+      select: { id: true },
+    });
+
     return Response.json({
       invite: {
         token: invite.token,
         receiverEmail: invite.receiverEmail,
-        receiverName: invite.receiverName ?? invite.receiver.fullName, // fallback
+        receiverName: invite.receiverName ?? invite.receiver.fullName,
         senderName: invite.receiver.owner?.name ?? null,
         senderEmail: invite.receiver.owner?.email ?? null,
+        // Flag to tell frontend which flow to show
+        hasExistingAccount: !!existingAccount,
       },
     });
   } catch (err) {
