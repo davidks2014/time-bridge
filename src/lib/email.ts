@@ -814,3 +814,108 @@ export async function sendVerificationRejectedEmail(
     return { success: false, error: message };
   }
 }
+
+// ─── 8. Memory recalled confirmation email ────────────────────────────────────
+// Sent to the sender when they successfully recall a released memory
+
+type SendMemoryRecalledEmailParams = {
+  senderName: string;
+  senderEmail: string;
+  collectionTitle: string;
+  receiverName: string;
+  itemCount: number;
+};
+
+export async function sendMemoryRecalledEmail(
+  params: SendMemoryRecalledEmailParams
+): Promise<EmailResult> {
+  const { senderName, senderEmail, collectionTitle, receiverName, itemCount } = params;
+  const dashboardUrl = `${getAppUrl()}/memory-sent`;
+
+  try {
+    const { data, error } = await getResendClient().emails.send({
+      from: FROM_ADDRESS,
+      to: senderEmail,
+      subject: `Time Bridge — your memory has been recalled`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a1a;">
+
+          <div style="background: #eff6ff; border-radius: 12px; padding: 24px; margin-bottom: 24px;">
+            <h2 style="font-size: 22px; font-weight: 500; margin: 0 0 8px 0; color: #1e40af;">
+              Memory recalled successfully
+            </h2>
+            <p style="margin: 0; color: #1d4ed8; font-size: 14px;">
+              Time Bridge — Emergency recall confirmation
+            </p>
+          </div>
+
+          <p style="color: #555; line-height: 1.7;">Dear ${senderName},</p>
+
+          <p style="color: #555; line-height: 1.7;">
+            Your memory has been successfully recalled. The receiver has not
+            been able to access any of its contents.
+          </p>
+
+          <div style="
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 24px 0;
+          ">
+            <p style="margin: 0 0 8px 0; font-size: 13px; color: #374151;">
+              <strong>Memory:</strong> ${collectionTitle}
+            </p>
+            <p style="margin: 0 0 8px 0; font-size: 13px; color: #374151;">
+              <strong>Intended for:</strong> ${receiverName}
+            </p>
+            <p style="margin: 0; font-size: 13px; color: #374151;">
+              <strong>Items recalled:</strong> ${itemCount}
+            </p>
+          </div>
+
+          <p style="color: #555; line-height: 1.7;">
+            The memory has been moved back to draft. You can edit it,
+            set a new release date, or delete it from your dashboard.
+          </p>
+
+          <div style="margin: 32px 0; text-align: center;">
+            <a
+              href="${dashboardUrl}"
+              style="
+                background-color: #1D9E75;
+                color: white;
+                padding: 16px 36px;
+                border-radius: 8px;
+                text-decoration: none;
+                font-weight: 500;
+                font-size: 16px;
+                display: inline-block;
+              "
+            >
+              Go to my memories
+            </a>
+          </div>
+
+          <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
+
+          <p style="color: #aaa; font-size: 12px;">
+            Time Bridge — Legacy message delivery service, Singapore.
+          </p>
+        </div>
+      `,
+    });
+
+    if (error) {
+      console.error("[email] sendMemoryRecalledEmail failed:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, id: data?.id ?? "" };
+
+  } catch (err) {
+    const message = (err as Error)?.message ?? "Unknown error";
+    console.error("[email] sendMemoryRecalledEmail exception:", message);
+    return { success: false, error: message };
+  }
+}

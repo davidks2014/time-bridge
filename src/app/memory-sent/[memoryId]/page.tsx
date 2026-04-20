@@ -47,6 +47,7 @@ type Receiver = {
   phone: string;
   address: string;
   identificationNo: string;
+  linkedUserId: string | null;
 };
 
 type Memory = {
@@ -135,6 +136,7 @@ function normalizeMemory(raw: any): Memory {
       phone: String(raw?.receiver?.phone ?? ""),
       address: String(raw?.receiver?.address ?? ""),
       identificationNo: String(raw?.receiver?.identificationNo ?? ""),
+      linkedUserId: raw?.receiver?.linkedUserId ?? null,
     },
     items: Array.isArray(raw?.items)
       ? raw.items.map((item: any) => ({
@@ -198,6 +200,10 @@ export default function MemoryDetailsPage({
   const [newEditFileError, setNewEditFileError] = useState("");
   const [addingAttachments, setAddingAttachments] = useState(false);
 
+  const [recalling, setRecalling] = useState(false);
+  const [recallError, setRecallError] = useState("");
+  const [recallInfo, setRecallInfo] = useState("");
+
   const isLocked = useMemo(() => {
     if (!memory) return false;
     return memory.items.some((i) => i.status === "RELEASED");
@@ -206,6 +212,46 @@ export default function MemoryDetailsPage({
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
+
+  async function recallMemory() {
+    if (!memory) return;
+
+    const confirmed = window.confirm(
+      "Are you sure you want to recall this memory? " +
+      "It will be moved back to draft. This can only be done within 24 hours of release."
+    );
+
+    if (!confirmed) return;
+
+    setRecalling(true);
+    setRecallError("");
+    setRecallInfo("");
+
+    try {
+      const res = await fetch("/api/memory/recall", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ collectionId: memory.id }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setRecallError(json?.error ?? "Recall failed. Please try again.");
+        return;
+      }
+
+      setRecallInfo(
+        "Memory recalled successfully. It has been moved back to draft. Reloading..."
+      );
+      setTimeout(() => loadMemory(), 1500);
+
+    } catch {
+      setRecallError("Network error. Please try again.");
+    } finally {
+      setRecalling(false);
+    }
+  }
 
   async function loadMemory() {
     setPageError("");
@@ -641,6 +687,78 @@ export default function MemoryDetailsPage({
             This memory is locked because at least one message has already been released.
           </div>
         )}
+
+        {/* ── Emergency recall button ── */}
+        {/* Only show when memory has released items within 24 hours */}
+        {(() => {
+          const releasedItems = memory.items.filter(
+            (i) => i.status === "RELEASED" && i.releasedAt
+          );
+          if (releasedItems.length === 0) return null;
+
+          const earliestRelease = releasedItems.reduce((earliest, item) => {
+            if (!item.releasedAt) return earliest;
+            const d = new Date(item.releasedAt);
+            return !earliest || d < earliest ? d : earliest;
+          }, null as Date | null);
+
+          if (!earliestRelease) return null;
+
+          const hoursSince =
+            (Date.now() - earliestRelease.getTime()) / (1000 * 60 * 60);
+
+          if (hoursSince > 24) return null;
+
+          const hoursLeft = Math.max(0, 24 - Math.floor(hoursSince));
+
+          return (
+            <div style={{
+              marginTop: 12,
+              padding: "12px 14px",
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: 10,
+            }}>
+              <div style={{ fontWeight: 700, color: "#991b1b", fontSize: 13 }}>
+                Emergency recall available — {hoursLeft} hour{hoursLeft !== 1 ? "s" : ""} remaining
+              </div>
+              <div style={{ color: "#b91c1c", fontSize: 12, marginTop: 4, lineHeight: 1.5 }}>
+                This memory was recently released. You can recall it within 24 hours
+                if the receiver has not yet claimed it.
+              </div>
+
+              {recallError && (
+                <div style={{ color: "#991b1b", fontSize: 12, marginTop: 8 }}>
+                  {recallError}
+                </div>
+              )}
+
+              {recallInfo && (
+                <div style={{ color: "#166534", fontSize: 12, marginTop: 8 }}>
+                  {recallInfo}
+                </div>
+              )}
+
+              <button
+                onClick={recallMemory}
+                disabled={recalling}
+                style={{
+                  marginTop: 10,
+                  background: "#dc2626",
+                  color: "white",
+                  border: "none",
+                  borderRadius: 6,
+                  padding: "6px 14px",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
+                {recalling ? "Recalling..." : "Emergency recall"}
+              </button>
+            </div>
+          );
+        })()}
 
         {pageError && <div style={{ marginTop: 10, color: "red" }}>{pageError}</div>}
         {attachmentError && <div style={{ marginTop: 10, color: "red" }}>{attachmentError}</div>}
