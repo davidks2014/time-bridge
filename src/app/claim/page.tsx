@@ -31,6 +31,13 @@ type PendingMemory = {
 export default function SelfClaimPage() {
   const router = useRouter();
 
+  // Claim code redemption
+  const [claimCode, setClaimCode] = useState("");
+  const [claimCodeNric, setClaimCodeNric] = useState("");
+  const [redeemingCode, setRedeemingCode] = useState(false);
+  const [claimCodeError, setClaimCodeError] = useState("");
+  const [claimCodeSuccess, setClaimCodeSuccess] = useState("");
+
   // Step 1 — NRIC search
   const [nric, setNric] = useState("");
   const [searching, setSearching] = useState(false);
@@ -81,6 +88,62 @@ export default function SelfClaimPage() {
     }
   }
 
+  async function redeemClaimCode() {
+    setClaimCodeError("");
+    setClaimCodeSuccess("");
+
+    if (!claimCode.trim()) {
+      return setClaimCodeError("Please enter your claim code.");
+    }
+    if (!claimCodeNric.trim()) {
+      return setClaimCodeError("Please enter your NRIC.");
+    }
+
+    setRedeemingCode(true);
+
+    try {
+      const res = await fetch("/api/claim/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          claimCode: claimCode.trim(),
+          identificationNo: claimCodeNric.trim().toUpperCase(),
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setClaimCodeError(json?.error ?? "Failed to redeem code. Please try again.");
+        return;
+      }
+
+      if (json.linked) {
+        // Already logged in and linked successfully
+        setClaimCodeSuccess("Memory claimed successfully! Redirecting...");
+        setTimeout(() => router.push("/memory-received"), 1500);
+        return;
+      }
+
+      if (json.requiresLogin) {
+        // Valid code but needs to log in first
+        setClaimCodeSuccess(
+          "Claim code is valid! Please log in or create an account to complete your claim."
+        );
+        setTimeout(() => {
+          router.push(
+            `/login?callbackUrl=/claim&claimCode=${encodeURIComponent(claimCode.trim())}&nric=${encodeURIComponent(claimCodeNric.trim())}`
+          );
+        }, 1500);
+      }
+
+    } catch {
+      setClaimCodeError("Network error. Please try again.");
+    } finally {
+      setRedeemingCode(false);
+    }
+  }
+
   function handleClaim(memory: PendingMemory) {
     // If there is an invite token, go to the invite claim page
     if (memory.inviteToken) {
@@ -101,8 +164,81 @@ export default function SelfClaimPage() {
         Enter your NRIC or identification number to find out.
       </p>
 
+      {/* ── Claim code section ── */}
+      <div style={{
+        marginTop: 24,
+        padding: 16,
+        background: "#f0fdf8",
+        border: "1px solid #6ee7b7",
+        borderRadius: 12,
+      }}>
+        <div style={{ fontWeight: 900, fontSize: 15, color: "#065f46" }}>
+          Have a claim code?
+        </div>
+        <div style={{ color: "#047857", fontSize: 13, marginTop: 6, lineHeight: 1.6 }}>
+          If an admin gave you a claim code during a visit, enter it here
+          along with your NRIC to fast-track your claim.
+        </div>
+
+        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+          <input
+            placeholder="Claim code (e.g. TB-K3X9M2QP)"
+            value={claimCode}
+            onChange={(e) => setClaimCode(e.target.value.toUpperCase())}
+            style={{ letterSpacing: 2 }}
+          />
+          <input
+            placeholder="Your NRIC to confirm identity"
+            value={claimCodeNric}
+            onChange={(e) => setClaimCodeNric(e.target.value.toUpperCase())}
+          />
+
+          {claimCodeError && (
+            <div style={{
+              padding: "8px 12px",
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: 8,
+              color: "#991b1b",
+              fontSize: 13,
+            }}>
+              {claimCodeError}
+            </div>
+          )}
+
+          {claimCodeSuccess && (
+            <div style={{
+              padding: "8px 12px",
+              background: "#f0fdf4",
+              border: "1px solid #bbf7d0",
+              borderRadius: 8,
+              color: "#166534",
+              fontSize: 13,
+            }}>
+              {claimCodeSuccess}
+            </div>
+          )}
+
+          <button onClick={redeemClaimCode} disabled={redeemingCode}>
+            {redeemingCode ? "Validating..." : "Redeem claim code"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Divider ── */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        margin: "24px 0",
+      }}>
+        <div style={{ flex: 1, height: 1, background: "#eee" }} />
+        <span style={{ color: "#999", fontSize: 13 }}>or search by NRIC</span>
+        <div style={{ flex: 1, height: 1, background: "#eee" }} />
+      </div>
+
       {/* ── NRIC search ── */}
-      <div style={{ marginTop: 24, display: "grid", gap: 12 }}>
+      <div style={{ display: "grid", gap: 12 }}>
         <input
           placeholder="NRIC / identification number"
           value={nric}
