@@ -20,7 +20,6 @@
 
 import { prisma } from "@/lib/prisma";
 import { createOrReuseReceiverInvite } from "@/lib/invites";
-import { sendInviteDelivery } from "@/lib/invites";
 
 export const dynamic = "force-dynamic";
 
@@ -89,35 +88,32 @@ export async function POST(req: Request) {
 
     // 5) Find items released in this run that need invite delivery
     // Idempotency: use a 5-minute window instead of exact timestamp
-    // This handles cases where cron fires twice — the second run finds
-    // the same items but createOrReuseReceiverInvite prevents duplicate emails
     const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
 
     const newlyReleased = await prisma.memoryItem.findMany({
       where: {
         status: "RELEASED",
-        // Find items released within the last 5 minutes
         releasedAt: { gte: fiveMinutesAgo },
         collection: {
-          receiver: {
-            // Only send to receivers who do not have an account yet
-            linkedUserId: null,
-          },
+          receiver: { linkedUserId: null },
         },
       },
       select: {
         id: true,
         collection: {
           select: {
-            // Collection ID for bounce alert reference
             id: true,
-            // Collection title for email personalisation
             title: true,
-            // Sender name for email personalisation
+            // Sender details for trusted contact escalation
             owner: {
-              select: { name: true },
+              select: {
+                id: true,
+                name: true,
+                trustedContactName: true,
+                trustedContactEmail: true,
+              },
             },
-            // Receiver contact details for email delivery
+            // Receiver details for all delivery channels
             receiver: {
               select: {
                 id: true,
@@ -125,8 +121,12 @@ export async function POST(req: Request) {
                 email: true,
                 phone: true,
                 address: true,
-                // NRIC for admin bounce alert identification
                 identificationNo: true,
+                receiverType: true,
+                guardianName: true,
+                guardianEmail: true,
+                guardianPhone: true,
+                guardianAddress: true,
                 linkedUserId: true,
               },
             },
@@ -140,41 +140,64 @@ export async function POST(req: Request) {
       },
     });
 
-    let invitesCreatedOrReused = 0;
+    // Import delivery queue
+    const { deliverMemoryNotification } = await import("@/lib/delivery-queue");
 
-    // 6) Send invite emails for each newly released memory
+    let invitesCreatedOrReused = 0;
+    let deliverySucceeded = 0;
+    let deliveryFailed = 0;
+
+    // 6) Process each newly released memory
     for (const item of newlyReleased) {
       const receiver = item.collection.receiver;
-      const senderName = item.collection.owner?.name ?? "Someone";
-      const collectionTitle = item.collection.title;
-      const memoryCount = item.collection.items.length;
+      const sender = item.collection.owner;
 
       // Skip if receiver already has an account — they can log in directly
       if (receiver.linkedUserId) continue;
 
-      // createOrReuseReceiverInvite is idempotent — if an invite already exists
-      // for this receiver it reuses the same token instead of creating a new one
-      // This prevents duplicate emails if the engine runs twice
+      // Create or reuse invite token
       const { invite } = await createOrReuseReceiverInvite(receiver.id);
 
-      if (invite) {
-        invitesCreatedOrReused += 1;
+      if (!invite) continue;
 
-        // Send the release notification email
-        // If delivery fails, admin bounce alert is sent automatically
-        await sendInviteDelivery(
-          {
-            fullName: receiver.fullName,
-            email: receiver.email,
-            phone: receiver.phone,
-            address: receiver.address,
-            identificationNo: receiver.identificationNo,
-          },
-          senderName,
-          invite.token,
-          collectionTitle,
-          memoryCount,
-          item.collection.id
+      invitesCreatedOrReused += 1;
+
+      // Attempt multi-channel delivery
+      const result = await deliverMemoryNotification({
+        receiver: {
+          id: receiver.id,
+          fullName: receiver.fullName,
+          email: receiver.email || null,
+          phone: receiver.phone || null,
+          address: receiver.address,
+          identificationNo: receiver.identificationNo,
+          receiverType: receiver.receiverType,
+          guardianName: receiver.guardianName || null,
+          guardianEmail: receiver.guardianEmail || null,
+          guardianPhone: receiver.guardianPhone || null,
+          guardianAddress: receiver.guardianAddress || null,
+        },
+        sender: {
+          id: sender.id,
+          name: sender.name,
+          trustedContactName: sender.trustedContactName || null,
+          trustedContactEmail: sender.trustedContactEmail || null,
+        },
+        inviteToken: invite.token,
+        collectionId: item.collection.id,
+        collectionTitle: item.collection.title,
+        memoryCount: item.collection.items.length,
+      });
+
+      if (result.success) {
+        deliverySucceeded += 1;
+        console.log(
+          `[release-engine] Delivered via ${result.channel} for receiver ${receiver.id}`
+        );
+      } else {
+        deliveryFailed += 1;
+        console.error(
+          `[release-engine] All delivery channels failed for receiver ${receiver.id}`
         );
       }
     }
@@ -186,6 +209,8 @@ export async function POST(req: Request) {
       releasedByMissedConfirmations: byMiss.count,
       totalReleased: byDate.count + byMiss.count,
       invitesCreatedOrReused,
+      deliverySucceeded,
+      deliveryFailed,
       newlyReleasedCount: newlyReleased.length,
       ranAt: now.toISOString(),
     });
