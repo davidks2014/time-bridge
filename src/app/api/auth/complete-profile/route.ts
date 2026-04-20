@@ -127,6 +127,18 @@ export async function POST(req: Request) {
       },
     });
 
+    // Auto-match NRIC against released memories
+    // If a match is found, a verification request is created automatically
+    // so admin can link the receiver to this user account
+    const { autoMatchNric } = await import("@/lib/nric-match");
+    const matchResult = await autoMatchNric(user.id, identificationNo);
+
+    if (matchResult.matchesFound > 0) {
+      console.log(
+        `[complete-profile] Auto-matched ${matchResult.matchesFound} receiver(s) for user ${user.id}`
+      );
+    }
+
     // 7) Save consent records for PDPA compliance
     const ipAddress = req.headers.get("x-forwarded-for") ?? "unknown";
 

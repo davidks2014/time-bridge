@@ -97,6 +97,36 @@ export async function POST(req: Request) {
         },
       });
 
+      // Auto-link receiver records to this approved user
+      // Find any verification requests for this user that are pending
+      const pendingRequests = await prisma.identityVerificationRequest.findMany({
+        where: {
+          requesterUserId: userId,
+          status: "PENDING",
+        },
+        select: {
+          id: true,
+          receiverId: true,
+        },
+      });
+
+      // Link each receiver to this user
+      const { linkUserToReceiver } = await import("@/lib/nric-match");
+
+      for (const request of pendingRequests) {
+        await linkUserToReceiver(userId, request.receiverId);
+
+        // Mark the verification request as approved
+        await prisma.identityVerificationRequest.update({
+          where: { id: request.id },
+          data: {
+            status: "APPROVED",
+            reviewedAt: new Date(),
+            reviewedBy: admin.id,
+          },
+        });
+      }
+
       // Send approval notification email to the user
       // Non-blocking — if email fails, approval still succeeds
       sendVerificationApprovedEmail({
