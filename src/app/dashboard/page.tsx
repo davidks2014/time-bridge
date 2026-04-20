@@ -221,6 +221,8 @@ export default function DashboardPage() {
       guardVerification();
       loadSummary();
       loadStorageSummary();
+      // Record device fingerprint — catches both email/password and Google login flows
+      fetch("/api/auth/record-device", { method: "POST" }).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);

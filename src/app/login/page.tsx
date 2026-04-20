@@ -43,12 +43,12 @@ function LoginForm() {
         return;
       }
 
-      // Record device fingerprint after successful login
-      // Non-blocking — login succeeds even if this fails
-      fetch("/api/auth/record-device", { method: "POST" }).catch(() => {});
+      // Wait briefly for the session to be fully established
+      // before recording the device fingerprint
+      setTimeout(() => {
+        fetch("/api/auth/record-device", { method: "POST" }).catch(() => {});
+      }, 1000);
 
-      // Redirect to callbackUrl — this is how receivers get back
-      // to their invite link page after logging in
       router.push(callbackUrl);
 
     } catch {
