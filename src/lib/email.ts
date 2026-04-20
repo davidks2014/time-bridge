@@ -19,7 +19,7 @@ import { Resend } from "resend";
 
 // ─── Resend client ────────────────────────────────────────────────────────────
 
-function getResendClient(): Resend {
+export function getResendClient(): Resend {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     throw new Error("RESEND_API_KEY is not set in environment variables.");
@@ -30,11 +30,11 @@ function getResendClient(): Resend {
 // ─── Sender address ───────────────────────────────────────────────────────────
 // Using Resend test address for UAT.
 // For production, replace with a verified domain email like noreply@yourdomain.com
-const FROM_ADDRESS = "Time Bridge <onboarding@resend.dev>";
+export const FROM_ADDRESS = "Time Bridge <onboarding@resend.dev>";
 
 // ─── App base URL ─────────────────────────────────────────────────────────────
 
-function getAppUrl(): string {
+export function getAppUrl(): string {
   return (
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "http://localhost:3000"
   );

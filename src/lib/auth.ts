@@ -164,28 +164,33 @@ export const authOptions: NextAuthOptions = {
       }
 
       // Always fetch fresh profile data from database
-      // This ensures session reflects latest state after profile completion
       if (token.email) {
         const dbUser = await prisma.user.findUnique({
           where: { email: String(token.email).toLowerCase() },
           select: {
+            id: true,
+            name: true,
             role: true,
             verificationStatus: true,
             identificationNo: true,
             phoneNumber: true,
             address: true,
+            proofOfLifeStage: true,
           },
         });
 
         if (dbUser) {
           token.role = dbUser.role;
           token.verificationStatus = dbUser.verificationStatus;
-          // profileComplete is true only when all three fields are filled
           token.profileComplete = !!(
             dbUser.identificationNo &&
             dbUser.phoneNumber &&
             dbUser.address
           );
+          // Store proof of life stage in token for fingerprint check
+          token.proofOfLifeStage = dbUser.proofOfLifeStage;
+          token.userId = dbUser.id;
+          token.userName = dbUser.name;
         }
       }
 

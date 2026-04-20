@@ -239,6 +239,9 @@ model User {
   // =========================================
   consents ConsentRecord[]
 
+  // Device fingerprints for suspicious login detection
+  deviceFingerprints DeviceFingerprint[]
+
   // =========================================
   // Storage Quota System
   // =========================================
@@ -636,4 +639,43 @@ model DeliveryAttempt {
   @@index([receiverId])
   @@index([channel])
   @@index([status])
+}
+// =========================================
+// Device Fingerprint
+// =========================================
+// Tracks known devices for each user
+// Used to detect suspicious logins during unresponsive periods
+// If a new device logs in while sender is in WARNING/CRITICAL stage,
+// admin is alerted to investigate before memories are released
+
+model DeviceFingerprint {
+  id String @id @default(cuid())
+
+  // Which user this fingerprint belongs to
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Hash of user-agent + rough IP prefix (not exact IP for privacy)
+  // We hash it so we never store raw device data
+  fingerprintHash String
+
+  // Human readable label for admin display
+  // e.g. "Chrome on Mac" or "Safari on iPhone"
+  deviceLabel String?
+
+  // When this device was first seen
+  firstSeenAt DateTime @default(now())
+
+  // When this device last logged in
+  lastSeenAt DateTime @default(now())
+
+  // Whether this login was flagged as suspicious
+  // (new device during WARNING/CRITICAL stage)
+  flagged Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, fingerprintHash])
+  @@index([userId])
+  @@index([flagged])
 }

@@ -43,6 +43,10 @@ function LoginForm() {
         return;
       }
 
+      // Record device fingerprint after successful login
+      // Non-blocking — login succeeds even if this fails
+      fetch("/api/auth/record-device", { method: "POST" }).catch(() => {});
+
       // Redirect to callbackUrl — this is how receivers get back
       // to their invite link page after logging in
       router.push(callbackUrl);
