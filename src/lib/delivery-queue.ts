@@ -84,9 +84,97 @@ export async function deliverMemoryNotification(
 ): Promise<{ channel: string; success: boolean }> {
   const { receiver, sender, inviteToken, collectionId, collectionTitle, memoryCount } = ctx;
 
-  // ── Channel 1: EMAIL ─────────────────────────────────────────────────────────
-  // Try email first — fastest and cheapest channel
-  // Skip if receiver has no email address
+  // ── Route based on receiver type ──────────────────────────────────────────
+  // CHILD and UNKNOWN receivers should never receive direct email
+  // They are always routed through a guardian first
+  const isChildOrUnknown =
+    receiver.receiverType === "CHILD" || receiver.receiverType === "UNKNOWN";
+
+  // ── Channel: GUARDIAN (first for CHILD/UNKNOWN) ───────────────────────────
+  if (isChildOrUnknown) {
+    if (receiver.guardianEmail && receiver.guardianName) {
+      try {
+        const result = await sendGuardianNotificationEmail({
+          guardianName: receiver.guardianName,
+          guardianEmail: receiver.guardianEmail,
+          senderName: sender.name,
+          receiverName: receiver.fullName,
+          collectionTitle,
+          inviteToken,
+        });
+
+        if (result.success) {
+          await recordAttempt(
+            receiver.id,
+            "GUARDIAN",
+            "DELIVERED",
+            `Guardian notified: ${receiver.guardianEmail} for ${receiver.receiverType} receiver`
+          );
+          return { channel: "GUARDIAN", success: true };
+        }
+
+        await recordAttempt(
+          receiver.id,
+          "GUARDIAN",
+          "FAILED",
+          result.error ?? "Guardian notification failed"
+        );
+
+      } catch (err) {
+        await recordAttempt(
+          receiver.id,
+          "GUARDIAN",
+          "FAILED",
+          String((err as Error)?.message ?? "Unknown error")
+        );
+      }
+    } else {
+      // No guardian set for child/unknown — record and escalate to admin
+      await recordAttempt(
+        receiver.id,
+        "GUARDIAN",
+        "PENDING",
+        `No guardian set for ${receiver.receiverType} receiver — escalating to admin`
+      );
+    }
+
+    // Guardian failed or not set — escalate to admin immediately for child/unknown
+    // We do not try email for children
+    const adminEmail = process.env.ADMIN_EMAIL;
+    if (adminEmail) {
+      try {
+        await sendAdminBounceAlertEmail({
+          adminEmail,
+          receiverName: receiver.fullName,
+          receiverEmail: receiver.email ?? "no email — child receiver",
+          receiverNric: receiver.identificationNo,
+          memoryId: collectionId,
+        });
+
+        await recordAttempt(
+          receiver.id,
+          "ADMIN",
+          "SENT",
+          `Guardian delivery failed for ${receiver.receiverType} receiver — admin alerted`
+        );
+
+        return { channel: "ADMIN", success: true };
+      } catch (err) {
+        await recordAttempt(
+          receiver.id,
+          "ADMIN",
+          "FAILED",
+          String((err as Error)?.message ?? "Unknown error")
+        );
+      }
+    }
+
+    return { channel: "NONE", success: false };
+  }
+
+  // ── ADULT receiver — standard email → trusted contact → admin flow ─────────
+
+  // Channel 1: EMAIL
   if (receiver.email && receiver.email.trim()) {
     try {
       const result = await sendReceiverInviteEmail({
@@ -105,7 +193,6 @@ export async function deliverMemoryNotification(
           "DELIVERED",
           `Email sent successfully. Resend ID: ${result.id}`
         );
-
         return { channel: "EMAIL", success: true };
       }
 
@@ -133,53 +220,7 @@ export async function deliverMemoryNotification(
     );
   }
 
-  // ── Channel 2: GUARDIAN (for child receivers) ─────────────────────────────
-  // If receiver is a child and has a guardian, notify the guardian
-  if (
-    (receiver.receiverType === "CHILD" || receiver.receiverType === "UNKNOWN") &&
-    receiver.guardianEmail &&
-    receiver.guardianName
-  ) {
-    try {
-      const result = await sendGuardianNotificationEmail({
-        guardianName: receiver.guardianName,
-        guardianEmail: receiver.guardianEmail,
-        senderName: sender.name,
-        receiverName: receiver.fullName,
-        collectionTitle,
-        inviteToken,
-      });
-
-      if (result.success) {
-        await recordAttempt(
-          receiver.id,
-          "GUARDIAN",
-          "DELIVERED",
-          `Guardian notification sent to ${receiver.guardianEmail}`
-        );
-
-        return { channel: "GUARDIAN", success: true };
-      }
-
-      await recordAttempt(
-        receiver.id,
-        "GUARDIAN",
-        "FAILED",
-        result.error ?? "Guardian notification failed"
-      );
-
-    } catch (err) {
-      await recordAttempt(
-        receiver.id,
-        "GUARDIAN",
-        "FAILED",
-        String((err as Error)?.message ?? "Unknown error")
-      );
-    }
-  }
-
-  // ── Channel 3: TRUSTED CONTACT ────────────────────────────────────────────
-  // Alert the sender's trusted contact to help reach the receiver
+  // Channel 2: TRUSTED CONTACT
   if (sender.trustedContactEmail && sender.trustedContactName) {
     try {
       const result = await sendTrustedContactAlertEmail({
@@ -196,7 +237,6 @@ export async function deliverMemoryNotification(
           "DELIVERED",
           `Trusted contact alerted: ${sender.trustedContactEmail}`
         );
-
         return { channel: "TRUSTED_CONTACT", success: true };
       }
 
@@ -217,10 +257,8 @@ export async function deliverMemoryNotification(
     }
   }
 
-  // ── Channel 4: ADMIN ──────────────────────────────────────────────────────
-  // All digital channels failed — alert admin for physical visit
+  // Channel 3: ADMIN fallback
   const adminEmail = process.env.ADMIN_EMAIL;
-
   if (adminEmail) {
     try {
       await sendAdminBounceAlertEmail({
@@ -250,6 +288,5 @@ export async function deliverMemoryNotification(
     }
   }
 
-  // All channels failed
   return { channel: "NONE", success: false };
 }
