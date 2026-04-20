@@ -2,32 +2,47 @@
  * src/app/api/jobs/run-proof-check/route.ts
  *
  * Purpose:
- * - Runs daily via Vercel cron (see vercel.json)
- * - Checks every sender's proof-of-life status
- * - Sends reminder emails based on how many days have passed
- *   since their last confirmation
+ * - Runs daily via Vercel cron
+ * - Implements 3-stage proof-of-life escalation:
  *
- * Reminder schedule (based on confirmationIntervalDays, default 30):
- * - Day 25 → gentle reminder email
- * - Day 29 → urgent warning email
- * - Day 30+ → missed confirmation counted, clock bumped forward
+ * Stage 1 — NORMAL:
+ *   Sender is within their confirmation window. No action.
+ *
+ * Stage 2 — WARNING:
+ *   Sender is within 5 days of their deadline.
+ *   Send a gentle reminder email.
+ *   Update proofOfLifeStage to WARNING.
+ *
+ * Stage 3 — CRITICAL:
+ *   Sender has missed their confirmation deadline.
+ *   Send urgent email to sender.
+ *   Send alert email to trusted contact (if set).
+ *   Increment missedConfirmations.
+ *   Update proofOfLifeStage to CRITICAL.
+ *
+ * Reset:
+ *   When sender clicks "I'm Alive", reset to NORMAL,
+ *   clear missedConfirmations, update lastConfirmedAt.
+ *
+ * Holiday snooze:
+ *   If snoozedUntil is set and in the future, skip this user entirely.
  *
  * Auth:
- * - Bearer CRON_SECRET for manual testing via Thunder Client
- * - x-vercel-cron header for Vercel cron automatic runs
+ *   Bearer CRON_SECRET for manual testing
+ *   x-vercel-cron header for Vercel automatic runs
  */
 
 import { prisma } from "@/lib/prisma";
 import {
   sendProofOfLifeReminderEmail,
+  sendTrustedContactAlertEmail,
 } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
 // ─── Auth check ───────────────────────────────────────────────────────────────
-// Accepts both manual Bearer token and Vercel cron header
 
-function isAuthorized(req: Request) {
+function isAuthorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
 
@@ -44,138 +59,172 @@ function isAuthorized(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    // 1) Check CRON_SECRET is configured
+    // 1) Auth check
     if (!process.env.CRON_SECRET) {
-      return Response.json(
-        { error: "CRON_SECRET is not configured." },
-        { status: 500 }
-      );
+      return Response.json({ error: "CRON_SECRET not configured." }, { status: 500 });
     }
 
-    // 2) Reject unauthorized requests
     if (!isAuthorized(req)) {
       return Response.json({ error: "Unauthorized." }, { status: 401 });
     }
 
     const now = new Date();
 
-    // 3) Load all users with their proof-of-life fields and email
-    // We need email and name to send reminder emails
+    // 2) Load all active users with their proof-of-life data
+    // Skip admin accounts — they do not need proof-of-life checks
     const users = await prisma.user.findMany({
+      where: {
+        role: "USER",
+        // Only check users who have at least one memory
+        collections: { some: {} },
+      },
       select: {
         id: true,
-        email: true,
         name: true,
+        email: true,
         createdAt: true,
         lastConfirmedAt: true,
         confirmationIntervalDays: true,
         missedConfirmations: true,
+        proofOfLifeStage: true,
+        snoozedUntil: true,
+        trustedContactName: true,
+        trustedContactEmail: true,
       },
     });
 
-    // 4) Track results for the response summary
-    let gentleRemindersSent = 0;
-    let urgentRemindersSent = 0;
-    let missedConfirmationsUpdated = 0;
+    // Track results for the response summary
+    let skippedSnoozed = 0;
+    let sentWarnings = 0;
+    let sentCritical = 0;
+    let sentTrustedContactAlerts = 0;
+    let alreadyNormal = 0;
 
-    // 5) Loop through every user and decide what action to take
+    // 3) Process each user
     for (const user of users) {
-      // Use 30 days as default if not set
+      // ── Skip if holiday snooze is active ────────────────────────────────────
+      if (user.snoozedUntil && new Date(user.snoozedUntil) > now) {
+        skippedSnoozed += 1;
+        continue;
+      }
+
       const intervalDays = user.confirmationIntervalDays || 30;
 
-      // Use account creation date as the starting anchor if never confirmed
+      // Use last confirmed time or account creation as the anchor
       const anchor = user.lastConfirmedAt ?? user.createdAt;
 
-      // Calculate how many days have passed since the anchor date
-      const daysSinceAnchor = Math.floor(
-        (now.getTime() - anchor.getTime()) / (1000 * 60 * 60 * 24)
+      // Calculate when the next confirmation is due
+      const nextDue = new Date(anchor);
+      nextDue.setDate(nextDue.getDate() + intervalDays);
+
+      // Calculate days remaining until deadline
+      const msRemaining = nextDue.getTime() - now.getTime();
+      const daysRemaining = Math.floor(msRemaining / (1000 * 60 * 60 * 24));
+
+      // ── Stage 1 — NORMAL ─────────────────────────────────────────────────────
+      // Sender is well within their window — nothing to do
+      if (daysRemaining > 5) {
+        // Reset to NORMAL if they were previously in WARNING or CRITICAL
+        // and have since confirmed (missedConfirmations would be 0)
+        if (user.proofOfLifeStage !== "NORMAL" && user.missedConfirmations === 0) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { proofOfLifeStage: "NORMAL" },
+          });
+        }
+        alreadyNormal += 1;
+        continue;
+      }
+
+      // ── Stage 2 — WARNING ─────────────────────────────────────────────────────
+      // Sender is within 5 days of their deadline
+      // Only send if they are not already in CRITICAL stage
+      if (daysRemaining >= 0 && daysRemaining <= 5) {
+        // Only send warning email if not already in WARNING or CRITICAL
+        if (user.proofOfLifeStage === "NORMAL") {
+          // Send gentle reminder email to sender
+          await sendProofOfLifeReminderEmail({
+            userName: user.name,
+            userEmail: user.email,
+            daysRemaining,
+            confirmationIntervalDays: intervalDays,
+          }).catch((err) =>
+            console.error(`[proof-check] Warning email failed for ${user.email}:`, err)
+          );
+
+          // Update stage to WARNING
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { proofOfLifeStage: "WARNING" },
+          });
+
+          sentWarnings += 1;
+        }
+        continue;
+      }
+
+      // ── Stage 3 — CRITICAL ────────────────────────────────────────────────────
+      // Sender has missed their deadline (daysRemaining < 0)
+      // Bump missed confirmations, send urgent emails
+
+      // Calculate the bumped anchor so we do not count the same
+      // missed cycle again on the next cron run
+      const bumpedAnchor = new Date(anchor);
+      bumpedAnchor.setDate(bumpedAnchor.getDate() + intervalDays);
+
+      const newMissedCount = user.missedConfirmations + 1;
+
+      // Update user — increment missed count, bump anchor, set stage
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          missedConfirmations: newMissedCount,
+          lastConfirmedAt: bumpedAnchor,
+          proofOfLifeStage: "CRITICAL",
+        },
+      });
+
+      // Send urgent reminder email to the sender
+      await sendProofOfLifeReminderEmail({
+        userName: user.name,
+        userEmail: user.email,
+        daysRemaining: Math.abs(daysRemaining), // days overdue
+        confirmationIntervalDays: intervalDays,
+        isOverdue: true,
+        missedCount: newMissedCount,
+      }).catch((err) =>
+        console.error(`[proof-check] Critical email failed for ${user.email}:`, err)
       );
 
-      // Calculate the gentle reminder threshold (5 days before deadline)
-      const gentleReminderDay = intervalDays - 5;
+      sentCritical += 1;
 
-      // Calculate the urgent reminder threshold (1 day before deadline)
-      const urgentReminderDay = intervalDays - 1;
+      // Alert the trusted contact if one is set
+      if (user.trustedContactEmail && user.trustedContactName) {
+        // Use "warning" stage for first miss, "critical" for subsequent misses
+        const alertStage = newMissedCount === 1 ? "warning" : "critical";
 
-      if (daysSinceAnchor >= intervalDays) {
-        // ── MISSED: sender has passed their deadline ──────────────────────────
-        // Bump the anchor forward by one interval so this missed cycle
-        // is not counted again on the next cron run
-        const bumpedAnchor = new Date(anchor);
-        bumpedAnchor.setDate(bumpedAnchor.getDate() + intervalDays);
-
-        await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            // Increment the missed count by 1
-            missedConfirmations: user.missedConfirmations + 1,
-            // Move anchor forward to prevent double-counting
-            lastConfirmedAt: bumpedAnchor,
-          },
-        });
-
-        missedConfirmationsUpdated += 1;
-        console.log(
-          `[proof-check] Missed confirmation for user: ${user.email}, total missed: ${user.missedConfirmations + 1}`
+        await sendTrustedContactAlertEmail({
+          trustedContactName: user.trustedContactName,
+          trustedContactEmail: user.trustedContactEmail,
+          senderName: user.name,
+          stage: alertStage,
+        }).catch((err) =>
+          console.error(`[proof-check] Trusted contact alert failed for ${user.email}:`, err)
         );
 
-      } else if (daysSinceAnchor >= urgentReminderDay) {
-        // ── URGENT: 1 day before deadline ────────────────────────────────────
-        // Send an urgent warning email to the sender
-        const daysRemaining = intervalDays - daysSinceAnchor;
-
-        const result = await sendProofOfLifeReminderEmail({
-          senderName: user.name,
-          senderEmail: user.email,
-          urgency: "urgent",
-          daysRemaining,
-        });
-
-        if (result.success) {
-          urgentRemindersSent += 1;
-          console.log(`[proof-check] Urgent reminder sent to: ${user.email}`);
-        } else {
-          console.error(
-            `[proof-check] Failed to send urgent reminder to: ${user.email}`,
-            result.error
-          );
-        }
-
-      } else if (daysSinceAnchor >= gentleReminderDay) {
-        // ── GENTLE: 5 days before deadline ───────────────────────────────────
-        // Send a gentle reminder email to the sender
-        const daysRemaining = intervalDays - daysSinceAnchor;
-
-        const result = await sendProofOfLifeReminderEmail({
-          senderName: user.name,
-          senderEmail: user.email,
-          urgency: "gentle",
-          daysRemaining,
-        });
-
-        if (result.success) {
-          gentleRemindersSent += 1;
-          console.log(`[proof-check] Gentle reminder sent to: ${user.email}`);
-        } else {
-          console.error(
-            `[proof-check] Failed to send gentle reminder to: ${user.email}`,
-            result.error
-          );
-        }
-
-      } else {
-        // ── NORMAL: sender is within safe window, no action needed ────────────
-        // Do nothing — sender is well within their confirmation period
+        sentTrustedContactAlerts += 1;
       }
     }
 
-    // 6) Return a summary of what happened in this run
+    // 4) Return summary
     return Response.json({
       message: "Proof-of-life check completed.",
-      gentleRemindersSent,
-      urgentRemindersSent,
-      missedConfirmationsUpdated,
       totalUsersChecked: users.length,
+      skippedSnoozed,
+      alreadyNormal,
+      sentWarnings,
+      sentCritical,
+      sentTrustedContactAlerts,
       ranAt: now.toISOString(),
     });
 

@@ -211,48 +211,49 @@ export async function sendReceiverInviteEmail(
 // urgency: "gentle" = day 25, "urgent" = day 29
 
 type SendProofOfLifeReminderParams = {
-  senderName: string;
-  senderEmail: string;
-  urgency: "gentle" | "urgent";
+  userName: string;
+  userEmail: string;
   daysRemaining: number;
+  confirmationIntervalDays: number;
+  isOverdue?: boolean;
+  missedCount?: number;
 };
 
 export async function sendProofOfLifeReminderEmail(
   params: SendProofOfLifeReminderParams
 ): Promise<EmailResult> {
-  const { senderName, senderEmail, urgency, daysRemaining } = params;
+  const { userName, userEmail, daysRemaining, isOverdue, missedCount } = params;
 
   const confirmUrl = `${getAppUrl()}/dashboard`;
 
-  const subject =
-    urgency === "gentle"
-      ? "Time Bridge – please confirm you are well"
-      : `Time Bridge – action required within ${daysRemaining} days`;
+  const subject = isOverdue
+    ? `Urgent — please confirm your Time Bridge activity (${missedCount} missed)`
+    : daysRemaining <= 1
+    ? `Time Bridge — please confirm you are well today`
+    : `Time Bridge — ${daysRemaining} days left to confirm your activity`;
 
-  const bodyText =
-    urgency === "gentle"
-      ? `This is a gentle reminder that your Time Bridge proof-of-life confirmation
-         is due in ${daysRemaining} days. Simply log in to your dashboard and click
-         "I'm Alive" to reset your timer.`
-      : `Your Time Bridge proof-of-life confirmation is overdue. If we do not hear
-         from you within ${daysRemaining} days, your trusted contact will be notified
-         and your memories may begin the release process. Please log in immediately
-         to confirm you are well.`;
+  const bodyText = isOverdue
+    ? `Your Time Bridge proof-of-life confirmation is overdue by ${daysRemaining} days.
+       This is missed confirmation #${missedCount}. Your trusted contact may be notified.
+       Please log in immediately to confirm you are well.`
+    : `This is a reminder that your Time Bridge proof-of-life confirmation is due in
+       ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}. Simply log in to your
+       dashboard and click "I'm Alive" to reset your timer.`;
 
   try {
     const { data, error } = await getResendClient().emails.send({
       from: FROM_ADDRESS,
-      to: senderEmail,
+      to: userEmail,
       subject,
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #1a1a1a;">
 
           <h2 style="font-size: 22px; font-weight: 500; margin-bottom: 8px;">
-            ${urgency === "gentle" ? "A gentle reminder from Time Bridge" : "Important – action required"}
+            ${isOverdue ? "Urgent — action required" : "A reminder from Time Bridge"}
           </h2>
 
           <p style="color: #555; line-height: 1.7;">
-            Dear ${senderName},
+            Dear ${userName},
           </p>
 
           <p style="color: #555; line-height: 1.7;">
@@ -263,7 +264,7 @@ export async function sendProofOfLifeReminderEmail(
             <a
               href="${confirmUrl}"
               style="
-                background-color: ${urgency === "gentle" ? "#1D9E75" : "#D85A30"};
+                background-color: ${isOverdue ? "#D85A30" : "#1D9E75"};
                 color: white;
                 padding: 14px 28px;
                 border-radius: 8px;
