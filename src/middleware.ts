@@ -25,12 +25,14 @@ export async function middleware(req: NextRequest) {
     "/register",
     "/pending-verification",
     "/complete-profile",
+    "/claim",
   ];
 
   // Also allow receiver invite routes publicly
   if (
     publicRoutes.includes(pathname) ||
-    pathname.startsWith("/receiver")
+    pathname.startsWith("/receiver") ||
+    pathname.startsWith("/claim")
   ) {
     return NextResponse.next();
   }
