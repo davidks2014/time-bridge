@@ -13,11 +13,11 @@
  *
  * After releasing:
  * - If receiver is NOT registered yet (receiver.linkedUserId is null)
- *   create/reuse invitation token and "send" (console.log for MVP)
+ *   create/reuse invitation token and attempt multi-channel delivery
  */
 
 import { prisma } from "@/lib/prisma";
-import { createOrReuseReceiverInvite, sendInviteDelivery } from "@/lib/invites";
+import { createOrReuseReceiverInvite } from "@/lib/invites";
 
 export const dynamic = "force-dynamic";
 
@@ -25,10 +25,7 @@ export async function POST() {
   try {
     const now = new Date();
 
-    /**
-     * 1) Release items by date (releaseDate NOT NULL and <= now)
-     * - Only items still in DRAFT
-     */
+    // 1) Release items by date
     const byDate = await prisma.memoryItem.updateMany({
       where: {
         status: "DRAFT",
@@ -36,14 +33,11 @@ export async function POST() {
       },
       data: {
         status: "RELEASED",
-        releasedAt: now, // ✅ actual release timestamp
+        releasedAt: now,
       },
     });
 
-    /**
-     * 2) Release items by missed confirmations (only if releaseDate is NULL)
-     * - Owner missedConfirmations >= 6
-     */
+    // 2) Release items by missed confirmations
     const byMiss = await prisma.memoryItem.updateMany({
       where: {
         status: "DRAFT",
@@ -54,28 +48,17 @@ export async function POST() {
       },
       data: {
         status: "RELEASED",
-        releasedAt: now, // ✅ actual release timestamp
+        releasedAt: now,
       },
     });
 
-    /**
-     * 3) Find newly released items that still need invitations
-     * - receiver.linkedUserId is null => receiver not registered
-     * - item.status = RELEASED
-     * - item.releasedAt = now (we use this run timestamp to detect "new")
-     *
-     * NOTE:
-     * - In production you'd use a job runner + more robust "just released" detection.
-     * - For MVP this is enough.
-     */
+    // 3) Find newly released items that still need invitations
     const newlyReleased = await prisma.memoryItem.findMany({
       where: {
         status: "RELEASED",
         releasedAt: now,
         collection: {
-          receiver: {
-            linkedUserId: null,
-          },
+          receiver: { linkedUserId: null },
         },
       },
       select: {
@@ -85,7 +68,12 @@ export async function POST() {
             id: true,
             title: true,
             owner: {
-              select: { name: true },
+              select: {
+                id: true,
+                name: true,
+                trustedContactName: true,
+                trustedContactEmail: true,
+              },
             },
             receiver: {
               select: {
@@ -95,6 +83,11 @@ export async function POST() {
                 phone: true,
                 address: true,
                 identificationNo: true,
+                receiverType: true,
+                guardianName: true,
+                guardianEmail: true,
+                guardianPhone: true,
+                guardianAddress: true,
                 linkedUserId: true,
               },
             },
@@ -107,43 +100,55 @@ export async function POST() {
       },
     });
 
-    /**
-     * 4) Create/reuse invites + "send"
-     */
+    // 4) Create/reuse invites + multi-channel delivery
+    const { deliverMemoryNotification } = await import("@/lib/delivery-queue");
+
     let invitesCreatedOrReused = 0;
+    let deliverySucceeded = 0;
+    let deliveryFailed = 0;
 
     for (const item of newlyReleased) {
       const receiver = item.collection.receiver;
-      const senderName = item.collection.owner?.name ?? "Someone";
-      const collectionTitle = item.collection.title;
-      // Count how many released items are in this collection
-      const memoryCount = item.collection.items.length;
+      const sender = item.collection.owner;
 
-      // Safety check (should already be null from query filter)
       if (receiver.linkedUserId) continue;
 
       const { invite } = await createOrReuseReceiverInvite(receiver.id);
 
-      if (invite) {
-        invitesCreatedOrReused += 1;
+      if (!invite) continue;
 
-        // Send release notification — if it fails, admin bounce alert is sent automatically
-        await sendInviteDelivery(
-          {
-            fullName: receiver.fullName,
-            email: receiver.email,
-            phone: receiver.phone,
-            address: receiver.address,
-            // Pass NRIC so admin bounce alert includes it for identification
-            identificationNo: receiver.identificationNo,
-          },
-          senderName,
-          invite.token,
-          collectionTitle,
-          memoryCount,
-          // Pass the collection ID so admin can find the case easily
-          item.collection.id
-        );
+      invitesCreatedOrReused += 1;
+
+      const result = await deliverMemoryNotification({
+        receiver: {
+          id: receiver.id,
+          fullName: receiver.fullName,
+          email: receiver.email || null,
+          phone: receiver.phone || null,
+          address: receiver.address,
+          identificationNo: receiver.identificationNo,
+          receiverType: receiver.receiverType,
+          guardianName: receiver.guardianName || null,
+          guardianEmail: receiver.guardianEmail || null,
+          guardianPhone: receiver.guardianPhone || null,
+          guardianAddress: receiver.guardianAddress || null,
+        },
+        sender: {
+          id: sender.id,
+          name: sender.name,
+          trustedContactName: sender.trustedContactName || null,
+          trustedContactEmail: sender.trustedContactEmail || null,
+        },
+        inviteToken: invite.token,
+        collectionId: item.collection.id,
+        collectionTitle: item.collection.title,
+        memoryCount: item.collection.items.length,
+      });
+
+      if (result.success) {
+        deliverySucceeded += 1;
+      } else {
+        deliveryFailed += 1;
       }
     }
 
@@ -153,6 +158,8 @@ export async function POST() {
       releasedByMissedConfirmations: byMiss.count,
       totalReleased: byDate.count + byMiss.count,
       invitesCreatedOrReused,
+      deliverySucceeded,
+      deliveryFailed,
       newlyReleasedCount: newlyReleased.length,
     });
   } catch (err) {
