@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import cloudinary from "@/lib/cloudinary";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import type { Prisma, AttachmentType } from "@prisma/client";
+import type { AttachmentType } from "@prisma/client";
 import { parseSingaporeDateTimeInput } from "@/lib/sg-time";
 
 export const dynamic = "force-dynamic";
@@ -269,18 +269,16 @@ export async function POST(req: Request) {
       throw e;
     }
 
-    const newReceiver = body.newReceiver ?? {};
-    const receiverFullName = String(newReceiver.fullName ?? "").trim();
-    const receiverEmail = normalizeEmail(newReceiver.email ?? "");
-    const receiverPhone = String(newReceiver.phone ?? "").trim();
-    const receiverAddress = String(newReceiver.address ?? "").trim();
-    const receiverIdNo = normalizeIdentificationNo(newReceiver.identificationNo ?? "");
-    const receiverType = String(newReceiver.receiverType ?? "ADULT").toUpperCase();
-    const guardianName = String(newReceiver.guardianName ?? "").trim() || null;
-    const guardianNric = String(newReceiver.guardianNric ?? "").trim() || null;
-    const guardianEmail = String(newReceiver.guardianEmail ?? "").trim() || null;
-    const guardianPhone = String(newReceiver.guardianPhone ?? "").trim() || null;
-    const guardianAddress = String(newReceiver.guardianAddress ?? "").trim() || null;
+    // Support receivers array (new) or newReceiver (legacy)
+    const receiversInput = Array.isArray(body.receivers)
+      ? body.receivers
+      : body.newReceiver
+      ? [body.newReceiver]
+      : [];
+
+    if (receiversInput.length === 0) {
+      return Response.json({ error: "At least one receiver is required." }, { status: 400 });
+    }
 
     if (!collectionTitle) {
       return Response.json({ error: "collectionTitle is required." }, { status: 400 });
@@ -297,24 +295,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // Receiver NRIC is always mandatory — it is the golden key for identity
-    if (!receiverIdNo) {
-      return Response.json({ error: "Receiver identificationNo is required." }, { status: 400 });
+    // Validate each receiver
+    for (const r of receiversInput) {
+      const rIdNo = normalizeIdentificationNo(r.identificationNo ?? "");
+      const rName = String(r.fullName ?? "").trim();
+      const rAddress = String(r.address ?? "").trim();
+      if (!rIdNo) return Response.json({ error: "Receiver identificationNo is required." }, { status: 400 });
+      if (!rName) return Response.json({ error: "Receiver fullName is required." }, { status: 400 });
+      if (!rAddress) return Response.json({ error: "Receiver address is required." }, { status: 400 });
     }
-
-    // Receiver name is mandatory — needed for all delivery channels
-    if (!receiverFullName) {
-      return Response.json({ error: "Receiver fullName is required." }, { status: 400 });
-    }
-
-    // Receiver address is mandatory — needed for physical visit fallback
-    if (!receiverAddress) {
-      return Response.json({ error: "Receiver address is required." }, { status: 400 });
-    }
-
-    // Receiver email and phone are optional
-    // A baby or young child may not have these yet
-    // If missing, delivery will go through guardian or physical visit
 
     let releaseDate: Date | null = null;
     try {
@@ -332,68 +321,6 @@ export async function POST(req: Request) {
       throw e;
     }
 
-    const existingReceiver = await prisma.receiver.findFirst({
-      where: {
-        ownerId: me.id,
-        identificationNo: receiverIdNo,
-      },
-      select: {
-        id: true,
-        fullName: true,
-        email: true,
-        phone: true,
-        address: true,
-        identificationNo: true,
-        linkedUserId: true,
-      },
-    });
-
-    if (existingReceiver && normalizeEmail(existingReceiver.email) !== receiverEmail) {
-      return Response.json(
-        {
-          error: "RECEIVER_EMAIL_MISMATCH",
-          message:
-            "Identification number matched an existing receiver, but email does not match. Please use the existing email or cancel and re-check.",
-          receiver: {
-            id: existingReceiver.id,
-            fullName: existingReceiver.fullName,
-            email: existingReceiver.email,
-            phone: existingReceiver.phone,
-            address: existingReceiver.address,
-            identificationNo: existingReceiver.identificationNo,
-            linkedUserId: existingReceiver.linkedUserId,
-          },
-        },
-        { status: 409 }
-      );
-    }
-
-    let receiverId: string;
-
-    if (existingReceiver) {
-      receiverId = existingReceiver.id;
-    } else {
-      const created = await prisma.receiver.create({
-        data: {
-          ownerId: me.id,
-          fullName: receiverFullName,
-          email: receiverEmail,
-          phone: receiverPhone,
-          address: receiverAddress,
-          identificationNo: receiverIdNo,
-          receiverType: (receiverType as any) ?? "ADULT",
-          guardianName,
-          guardianNric,
-          guardianEmail,
-          guardianPhone,
-          guardianAddress,
-        },
-        select: { id: true },
-      });
-
-      receiverId = created.id;
-    }
-
     const totalAttachmentBytes = attachments.reduce(
       (sum, attachment) => sum + attachment.mediaSizeBytes,
       BigInt(0)
@@ -404,7 +331,6 @@ export async function POST(req: Request) {
     const projectedUsedBytes = currentUsedBytes + totalAttachmentBytes;
 
     if (projectedUsedBytes > limitBytes) {
-      // Best-effort cleanup because direct uploads may already exist in Cloudinary
       if (attachments.length > 0) {
         await cleanupCloudinaryUploads(
           attachments.map((attachment) => ({
@@ -429,71 +355,93 @@ export async function POST(req: Request) {
       );
     }
 
-    const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const memory = await tx.memoryCollection.create({
+    // Create one memory collection per receiver
+    const createdCollections = [];
+
+    for (const receiverInput of receiversInput) {
+      const rIdNo = normalizeIdentificationNo(receiverInput.identificationNo ?? "");
+      const rName = String(receiverInput.fullName ?? "").trim();
+      const rEmail = normalizeEmail(receiverInput.email ?? "");
+      const rPhone = String(receiverInput.phone ?? "").trim();
+      const rAddress = String(receiverInput.address ?? "").trim();
+      const rType = String(receiverInput.receiverType ?? "ADULT").toUpperCase();
+      const gName = String(receiverInput.guardianName ?? "").trim() || null;
+      const gNric = String(receiverInput.guardianNric ?? "").trim() || null;
+      const gEmail = String(receiverInput.guardianEmail ?? "").trim() || null;
+      const gPhone = String(receiverInput.guardianPhone ?? "").trim() || null;
+      const gAddress = String(receiverInput.guardianAddress ?? "").trim() || null;
+
+      // Find or create receiver
+      let receiver = await prisma.receiver.findFirst({
+        where: { ownerId: me.id, identificationNo: rIdNo },
+      });
+
+      if (receiver) {
+        receiver = await prisma.receiver.update({
+          where: { id: receiver.id },
+          data: {
+            fullName: rName, email: rEmail, phone: rPhone, address: rAddress,
+            receiverType: rType,
+            guardianName: gName, guardianNric: gNric, guardianEmail: gEmail,
+            guardianPhone: gPhone, guardianAddress: gAddress,
+          } as any,
+        });
+      } else {
+        receiver = await prisma.receiver.create({
+          data: {
+            ownerId: me.id, fullName: rName, email: rEmail, phone: rPhone,
+            address: rAddress, identificationNo: rIdNo, receiverType: rType,
+            guardianName: gName, guardianNric: gNric, guardianEmail: gEmail,
+            guardianPhone: gPhone, guardianAddress: gAddress,
+          } as any,
+        });
+      }
+
+      // Create collection with items and attachments
+      const collection = await prisma.memoryCollection.create({
         data: {
           ownerId: me.id,
-          receiverId,
+          receiverId: receiver.id,
           title: collectionTitle,
+          items: {
+            create: {
+              ownerId: me.id,
+              title: itemTitle,
+              content: itemContent,
+              releaseDate: releaseDate ? new Date(releaseDate) : null,
+              attachments: {
+                create: attachments.map((att) => ({
+                  type: att.type,
+                  mediaUrl: att.mediaUrl,
+                  mediaPublicId: att.mediaPublicId,
+                  mediaFileName: att.mediaFileName ?? null,
+                  mediaMimeType: att.mediaMimeType ?? null,
+                  mediaSizeBytes: att.mediaSizeBytes,
+                })),
+              },
+            },
+          },
         },
         select: { id: true },
       });
 
-      const item = await tx.memoryItem.create({
-        data: {
-          ownerId: me.id,
-          collectionId: memory.id,
-          title: itemTitle,
-          content: itemContent,
-          releaseDate,
-        },
-        select: { id: true, status: true },
+      createdCollections.push(collection);
+    }
+
+    // Update storage usage once for the shared attachments
+    if (attachments.length > 0) {
+      await prisma.user.update({
+        where: { id: me.id },
+        data: { storageUsedBytes: { increment: totalAttachmentBytes } },
       });
-
-      if (attachments.length > 0) {
-        await tx.memoryAttachment.createMany({
-          data: attachments.map((attachment) => ({
-            itemId: item.id,
-            type: attachment.type,
-            mediaUrl: attachment.mediaUrl,
-            mediaPublicId: attachment.mediaPublicId,
-            mediaFileName: attachment.mediaFileName,
-            mediaMimeType: attachment.mediaMimeType,
-            mediaSizeBytes: attachment.mediaSizeBytes,
-          })),
-        });
-
-        await tx.user.update({
-          where: { id: me.id },
-          data: {
-            storageUsedBytes: {
-              increment: totalAttachmentBytes,
-            },
-          },
-        });
-      }
-
-      return {
-        memoryId: memory.id,
-        itemId: item.id,
-        itemStatus: item.status,
-        attachmentCount: attachments.length,
-        storageUsedBytes: projectedUsedBytes.toString(),
-      };
-    });
+    }
 
     return Response.json(
       {
-        message: "Memory created.",
-        memoryId: result.memoryId,
-        itemId: result.itemId,
-        itemStatus: result.itemStatus,
-        attachmentCount: result.attachmentCount,
-        storage: {
-          usedBytes: projectedUsedBytes.toString(),
-          limitBytes: limitBytes.toString(),
-          remainingBytes: (limitBytes - projectedUsedBytes).toString(),
-        },
+        message: `Memory created for ${createdCollections.length} receiver(s).`,
+        // Return first collection ID for redirect (backwards compatible)
+        memoryId: createdCollections[0]?.id,
+        collections: createdCollections.map((c) => ({ id: c.id })),
       },
       { status: 201 }
     );

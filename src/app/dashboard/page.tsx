@@ -10,16 +10,6 @@ const MAX_FILES = 5;
 const MAX_IMAGE_MB = 10;
 const MAX_VIDEO_MB = 100;
 
-type MismatchReceiver = {
-  id: string;
-  fullName: string;
-  email: string;
-  phone: string;
-  address: string;
-  identificationNo: string;
-  linkedUserId: string | null;
-};
-
 type MeUser = {
   role: "USER" | "ADMIN";
   verificationStatus: "PENDING" | "APPROVED" | "REJECTED";
@@ -138,31 +128,39 @@ export default function DashboardPage() {
   const [releaseDateOnly, setReleaseDateOnly] = useState("");
   const [releaseTimeOnly, setReleaseTimeOnly] = useState("");
 
-  const [receiverName, setReceiverName] = useState("");
-  const [receiverEmail, setReceiverEmail] = useState("");
-  const [receiverPhone, setReceiverPhone] = useState("");
-  const [receiverAddress, setReceiverAddress] = useState("");
-  const [receiverIdNo, setReceiverIdNo] = useState("");
-
-  // Receiver type — determines delivery path when memory is released
-  // ADULT = direct email delivery
-  // CHILD = guardian handles delivery
-  // UNKNOWN = no contact details yet, guardian or admin handles
-  const [receiverType, setReceiverType] = useState<"ADULT" | "CHILD" | "UNKNOWN">("ADULT");
-
-  // Guardian fields — shown when receiver type is CHILD or UNKNOWN
-  const [guardianName, setGuardianName] = useState("");
-  const [guardianNric, setGuardianNric] = useState("");
-  const [guardianEmail, setGuardianEmail] = useState("");
-  const [guardianPhone, setGuardianPhone] = useState("");
-  const [guardianAddress, setGuardianAddress] = useState("");
-
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
 
-  const [mismatchReceiver, setMismatchReceiver] = useState<MismatchReceiver | null>(null);
+  // Multiple receivers — each memory can be sent to multiple people
+  // Each receiver gets their own collection (one collection per receiver)
+  const [receivers, setReceivers] = useState([{
+    idNo: "", name: "", email: "", phone: "", address: "",
+    receiverType: "ADULT" as "ADULT" | "CHILD" | "UNKNOWN",
+    guardianName: "", guardianNric: "", guardianEmail: "",
+    guardianPhone: "", guardianAddress: "",
+  }]);
+
+  function updateReceiver(index: number, field: string, value: string) {
+    setReceivers((prev) =>
+      prev.map((r, i) => i === index ? { ...r, [field]: value } : r)
+    );
+  }
+
+  function addReceiver() {
+    setReceivers((prev) => [...prev, {
+      idNo: "", name: "", email: "", phone: "", address: "",
+      receiverType: "ADULT" as "ADULT" | "CHILD" | "UNKNOWN",
+      guardianName: "", guardianNric: "", guardianEmail: "",
+      guardianPhone: "", guardianAddress: "",
+    }]);
+  }
+
+  function removeReceiver(index: number) {
+    if (receivers.length === 1) return;
+    setReceivers((prev) => prev.filter((_, i) => i !== index));
+  }
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -231,10 +229,6 @@ export default function DashboardPage() {
     return selectedFiles.map((file) => file.name);
   }, [selectedFiles]);
 
-  function clearMismatch() {
-    setMismatchReceiver(null);
-  }
-
   /**
    * Detects approximate age from Singapore NRIC
    * Format: S/T + 2-digit birth year + 5 digits + checksum letter
@@ -283,21 +277,15 @@ export default function DashboardPage() {
     setReleaseMode("LATER");
     resetReleaseInputs();
 
-    setReceiverName("");
-    setReceiverEmail("");
-    setReceiverPhone("");
-    setReceiverAddress("");
-    setReceiverIdNo("");
-    setReceiverType("ADULT");
-    setGuardianName("");
-    setGuardianNric("");
-    setGuardianEmail("");
-    setGuardianPhone("");
-    setGuardianAddress("");
+    setReceivers([{
+      idNo: "", name: "", email: "", phone: "", address: "",
+      receiverType: "ADULT",
+      guardianName: "", guardianNric: "", guardianEmail: "",
+      guardianPhone: "", guardianAddress: "",
+    }]);
 
     setError("");
     setInfo("");
-    clearMismatch();
   }
 
   function inferAttachmentType(file: File): AttachmentType {
@@ -466,7 +454,6 @@ export default function DashboardPage() {
   async function createMemory() {
     setError("");
     setInfo("");
-    clearMismatch();
 
     // Check profile completeness before allowing memory creation
     // This gives a clear friendly message instead of an API error
@@ -488,17 +475,19 @@ export default function DashboardPage() {
     if (!itemTitle.trim()) return setError("Message title is required.");
     if (!itemContent.trim()) return setError("Message content is required.");
 
-    if (!receiverIdNo.trim()) return setError("Receiver identification number is required.");
-    if (!receiverName.trim()) return setError("Receiver name is required.");
-    if (!receiverAddress.trim()) return setError("Receiver address is required.");
-
-    // When receiver is a child or unknown, guardian details are required
-    if (receiverType === "CHILD" || receiverType === "UNKNOWN") {
-      if (!guardianName.trim()) return setError("Guardian name is required for child or unknown receivers.");
-      if (!guardianNric.trim()) return setError("Guardian NRIC is required.");
-      if (!guardianEmail.trim()) return setError("Guardian email is required.");
-      if (!guardianPhone.trim()) return setError("Guardian phone is required.");
-      if (!guardianAddress.trim()) return setError("Guardian address is required.");
+    // Validate all receivers
+    for (let i = 0; i < receivers.length; i++) {
+      const r = receivers[i];
+      const label = receivers.length > 1 ? `Receiver ${i + 1}` : "Receiver";
+      if (!r.idNo.trim()) return setError(`${label} NRIC is required.`);
+      if (!r.name.trim()) return setError(`${label} name is required.`);
+      if (!r.address.trim()) return setError(`${label} address is required.`);
+      if (r.receiverType === "CHILD" || r.receiverType === "UNKNOWN") {
+        if (!r.guardianName.trim()) return setError(`${label} guardian name is required.`);
+        if (!r.guardianEmail.trim()) return setError(`${label} guardian email is required.`);
+        if (!r.guardianPhone.trim()) return setError(`${label} guardian phone is required.`);
+        if (!r.guardianAddress.trim()) return setError(`${label} guardian address is required.`);
+      }
     }
 
     const normalizedReleaseDateTime = buildReleaseDateTime(releaseDateOnly, releaseTimeOnly);
@@ -540,30 +529,23 @@ export default function DashboardPage() {
           itemContent: itemContent.trim(),
           attachments,
           releaseDate: releaseMode === "NOW" ? normalizedReleaseDateTime : null,
-          newReceiver: {
-            fullName: receiverName.trim(),
-            email: receiverEmail.trim() || null,
-            phone: receiverPhone.trim() || null,
-            address: receiverAddress.trim(),
-            identificationNo: receiverIdNo.trim(),
-            receiverType,
-            guardianName: guardianName.trim() || null,
-            guardianNric: guardianNric.trim() || null,
-            guardianEmail: guardianEmail.trim() || null,
-            guardianPhone: guardianPhone.trim() || null,
-            guardianAddress: guardianAddress.trim() || null,
-          },
+          receivers: receivers.map((r) => ({
+            fullName: r.name.trim(),
+            email: r.email.trim() || null,
+            phone: r.phone.trim() || null,
+            address: r.address.trim(),
+            identificationNo: r.idNo.trim(),
+            receiverType: r.receiverType,
+            guardianName: r.guardianName.trim() || null,
+            guardianNric: r.guardianNric.trim() || null,
+            guardianEmail: r.guardianEmail.trim() || null,
+            guardianPhone: r.guardianPhone.trim() || null,
+            guardianAddress: r.guardianAddress.trim() || null,
+          })),
         }),
       });
 
       const json = await res.json();
-
-      if (res.status === 409 && json?.error === "RECEIVER_EMAIL_MISMATCH") {
-        setMismatchReceiver(json.receiver as MismatchReceiver);
-        setError("");
-        setInfo("");
-        return;
-      }
 
       if (!res.ok) {
         if (res.status === 400 && json?.error?.toLowerCase().includes("storage")) {
@@ -592,17 +574,6 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  function useExistingEmail() {
-    if (!mismatchReceiver) return;
-    setReceiverEmail(mismatchReceiver.email);
-    setInfo("Email updated to the existing receiver email. Click Create Memory again.");
-  }
-
-  function cancelMismatch() {
-    clearMismatch();
-    setInfo("");
   }
 
   function removeSelectedFile(indexToRemove: number) {
@@ -1001,231 +972,181 @@ export default function DashboardPage() {
                 : "Choose the Singapore date and time for release."}
             </div>
 
-            {/* ── Receiver section ── */}
-            <div style={{ fontWeight: 800, marginTop: 8 }}>Receiver</div>
-
-            {/* Receiver type selector */}
-            <div style={{ fontSize: 13, color: "#666", lineHeight: 1.6 }}>
-              Who is receiving this memory?
+            {/* ── Receivers section ── */}
+            <div style={{ fontWeight: 800, marginTop: 8 }}>
+              Receivers ({receivers.length})
             </div>
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {(["ADULT", "CHILD", "UNKNOWN"] as const).map((type) => (
-                <label
-                  key={type}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    cursor: "pointer",
-                    padding: "8px 14px",
-                    border: `1px solid ${receiverType === type ? "#1D9E75" : "#ddd"}`,
-                    borderRadius: 8,
-                    background: receiverType === type ? "#f0fdf8" : "white",
-                    fontSize: 13,
-                  }}
-                >
-                  <input
-                    type="radio"
-                    name="receiverType"
-                    checked={receiverType === type}
-                    onChange={() => setReceiverType(type)}
-                  />
-                  {type === "ADULT" ? "Adult" : type === "CHILD" ? "Child / Minor" : "No contact details yet"}
-                </label>
-              ))}
-            </div>
-
-            {/* Receiver NRIC — always mandatory */}
-            <input
-              placeholder="Receiver NRIC / identification number *"
-              value={receiverIdNo}
-              onChange={(e) => {
-                setReceiverIdNo(e.target.value);
-                clearMismatch();
-              }}
-            />
-
-            {/* Child age detection warning */}
-            {(() => {
-              const age = getAgeFromNric(receiverIdNo);
-              if (age === null || age >= 18) return null;
-              return (
+            {receivers.map((receiver, index) => (
+              <div key={index} style={{
+                border: "1px solid #e5e7eb",
+                borderRadius: 12,
+                padding: 14,
+                marginTop: 8,
+              }}>
                 <div style={{
-                  padding: "10px 14px",
-                  background: "#f5f3ff",
-                  border: "1px solid #c4b5fd",
-                  borderRadius: 8,
-                  color: "#4c1d95",
-                  fontSize: 13,
-                  lineHeight: 1.6,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 10,
                 }}>
-                  This receiver appears to be approximately {age} years old based on their NRIC.
-                  For the best chance of successful delivery, please select{" "}
-                  <strong>Child / Minor</strong> as the receiver type and add a guardian
-                  who can hold this message until the child is ready.
-                  {receiverType !== "CHILD" && (
-                    <div style={{ marginTop: 8 }}>
-                      <button
-                        type="button"
-                        onClick={() => setReceiverType("CHILD")}
-                        style={{
-                          background: "#7c3aed",
-                          color: "white",
-                          border: "none",
-                          borderRadius: 6,
-                          padding: "4px 12px",
-                          cursor: "pointer",
-                          fontSize: 12,
-                          fontWeight: 500,
-                        }}
-                      >
-                        Switch to Child / Minor
-                      </button>
-                    </div>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>
+                    {receivers.length > 1 ? `Receiver ${index + 1}` : "Receiver"}
+                  </div>
+                  {receivers.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeReceiver(index)}
+                      style={{
+                        background: "none",
+                        border: "1px solid #fecaca",
+                        color: "#dc2626",
+                        borderRadius: 6,
+                        padding: "2px 10px",
+                        cursor: "pointer",
+                        fontSize: 12,
+                      }}
+                    >
+                      Remove
+                    </button>
                   )}
                 </div>
-              );
-            })()}
 
-            {/* Receiver name — always mandatory */}
-            <input
-              placeholder="Receiver full name *"
-              value={receiverName}
-              onChange={(e) => {
-                setReceiverName(e.target.value);
-                clearMismatch();
-              }}
-            />
-
-            {/* Receiver address — always mandatory */}
-            <input
-              placeholder="Receiver address *"
-              value={receiverAddress}
-              onChange={(e) => {
-                setReceiverAddress(e.target.value);
-                clearMismatch();
-              }}
-            />
-
-            {/* Receiver email — optional, shown for all types */}
-            <input
-              placeholder={
-                receiverType === "ADULT"
-                  ? "Receiver email (recommended for digital delivery)"
-                  : "Receiver email (optional — child may not have one yet)"
-              }
-              value={receiverEmail}
-              onChange={(e) => {
-                setReceiverEmail(e.target.value);
-                clearMismatch();
-              }}
-            />
-
-            {/* Warning when email is empty */}
-            {!receiverEmail.trim() && (
-              <div style={{
-                padding: "8px 12px",
-                background: "#fffbeb",
-                border: "1px solid #fde68a",
-                borderRadius: 8,
-                color: "#92400e",
-                fontSize: 12,
-                lineHeight: 1.6,
-              }}>
-                No email entered — delivery will go through guardian or physical visit.
-                Make sure guardian details below are complete.
-              </div>
-            )}
-
-            {/* Receiver phone — optional */}
-            <input
-              placeholder="Receiver phone (optional)"
-              value={receiverPhone}
-              onChange={(e) => {
-                setReceiverPhone(e.target.value);
-                clearMismatch();
-              }}
-            />
-
-            {/* ── Guardian section — shown for CHILD or UNKNOWN ── */}
-            {(receiverType === "CHILD" || receiverType === "UNKNOWN") && (
-              <div style={{
-                marginTop: 8,
-                padding: 14,
-                background: "#f5f3ff",
-                border: "1px solid #c4b5fd",
-                borderRadius: 12,
-              }}>
-                <div style={{ fontWeight: 800, color: "#4c1d95", marginBottom: 6 }}>
-                  Guardian details (required)
-                </div>
-                <div style={{ fontSize: 12, color: "#6d28d9", marginBottom: 10, lineHeight: 1.6 }}>
-                  {receiverType === "CHILD"
-                    ? "The guardian is a trusted adult who will hold this message safely and deliver it to the child when the time is right. The guardian never sees the message content — they are only a trusted bridge."
-                    : "You do not have the receiver's contact details yet. A guardian will receive the notification on your behalf and help deliver the message when the receiver is found. You can update the receiver's details later in your profile."}
+                {/* Receiver type selector */}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                  {(["ADULT", "CHILD", "UNKNOWN"] as const).map((type) => (
+                    <label key={type} style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      cursor: "pointer",
+                      padding: "6px 12px",
+                      border: `1px solid ${receiver.receiverType === type ? "#1D9E75" : "#ddd"}`,
+                      borderRadius: 8,
+                      background: receiver.receiverType === type ? "#f0fdf8" : "white",
+                      fontSize: 12,
+                    }}>
+                      <input
+                        type="radio"
+                        name={`receiverType-${index}`}
+                        checked={receiver.receiverType === type}
+                        onChange={() => updateReceiver(index, "receiverType", type)}
+                      />
+                      {type === "ADULT" ? "Adult" : type === "CHILD" ? "Child / Minor" : "No contact yet"}
+                    </label>
+                  ))}
                 </div>
 
                 <div style={{ display: "grid", gap: 8 }}>
                   <input
-                    placeholder="Guardian full name *"
-                    value={guardianName}
-                    onChange={(e) => setGuardianName(e.target.value)}
+                    placeholder="NRIC / identification number *"
+                    value={receiver.idNo}
+                    onChange={(e) => updateReceiver(index, "idNo", e.target.value)}
                   />
-                  <input
-                    placeholder="Guardian NRIC *"
-                    value={guardianNric}
-                    onChange={(e) => setGuardianNric(e.target.value)}
-                  />
-                  <input
-                    placeholder="Guardian email *"
-                    type="email"
-                    value={guardianEmail}
-                    onChange={(e) => setGuardianEmail(e.target.value)}
-                  />
-                  <input
-                    placeholder="Guardian phone *"
-                    value={guardianPhone}
-                    onChange={(e) => setGuardianPhone(e.target.value)}
-                  />
-                  <input
-                    placeholder="Guardian address *"
-                    value={guardianAddress}
-                    onChange={(e) => setGuardianAddress(e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
 
-            {/* Mismatch receiver warning */}
-            {mismatchReceiver && (
-              <div style={{
-                marginTop: 10,
-                border: "1px solid #f2c94c",
-                background: "#fff8db",
-                borderRadius: 12,
-                padding: 12,
-              }}>
-                <div style={{ fontWeight: 900 }}>Receiver email mismatch</div>
-                <div style={{ marginTop: 6 }}>
-                  Identification number matched an existing receiver:
+                  {/* Child age warning */}
+                  {(() => {
+                    const age = getAgeFromNric(receiver.idNo);
+                    if (age === null || age >= 18) return null;
+                    return (
+                      <div style={{
+                        padding: "8px 12px",
+                        background: "#f5f3ff",
+                        border: "1px solid #c4b5fd",
+                        borderRadius: 8,
+                        color: "#4c1d95",
+                        fontSize: 12,
+                      }}>
+                        Receiver appears to be approximately {age} years old.
+                        {receiver.receiverType !== "CHILD" && (
+                          <span
+                            style={{ marginLeft: 6, color: "#7c3aed", cursor: "pointer", textDecoration: "underline" }}
+                            onClick={() => updateReceiver(index, "receiverType", "CHILD")}
+                          >
+                            Switch to Child
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  <input
+                    placeholder="Full name *"
+                    value={receiver.name}
+                    onChange={(e) => updateReceiver(index, "name", e.target.value)}
+                  />
+                  <input
+                    placeholder="Address *"
+                    value={receiver.address}
+                    onChange={(e) => updateReceiver(index, "address", e.target.value)}
+                  />
+                  <input
+                    placeholder={receiver.receiverType === "ADULT" ? "Email (recommended)" : "Email (optional)"}
+                    value={receiver.email}
+                    onChange={(e) => updateReceiver(index, "email", e.target.value)}
+                  />
+                  {!receiver.email && (
+                    <div style={{
+                      padding: "6px 10px",
+                      background: "#fffbeb",
+                      border: "1px solid #fde68a",
+                      borderRadius: 6,
+                      color: "#92400e",
+                      fontSize: 11,
+                    }}>
+                      No email — delivery via guardian or admin visit
+                    </div>
+                  )}
+                  <input
+                    placeholder="Phone (optional)"
+                    value={receiver.phone}
+                    onChange={(e) => updateReceiver(index, "phone", e.target.value)}
+                  />
                 </div>
-                <div style={{ marginTop: 6 }}>
-                  Name: <b>{mismatchReceiver.fullName}</b>
-                </div>
-                <div style={{ marginTop: 6 }}>
-                  Existing email in system: <b>{mismatchReceiver.email}</b>
-                </div>
-                <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
-                  <button type="button" onClick={useExistingEmail}>
-                    Use existing email
-                  </button>
-                  <button type="button" onClick={cancelMismatch}>
-                    Cancel
-                  </button>
-                </div>
+
+                {/* Guardian section */}
+                {(receiver.receiverType === "CHILD" || receiver.receiverType === "UNKNOWN") && (
+                  <div style={{
+                    marginTop: 10,
+                    padding: 12,
+                    background: "#f5f3ff",
+                    border: "1px solid #c4b5fd",
+                    borderRadius: 10,
+                  }}>
+                    <div style={{ fontWeight: 700, color: "#4c1d95", fontSize: 13, marginBottom: 8 }}>
+                      Guardian details (required)
+                    </div>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <input placeholder="Guardian full name *" value={receiver.guardianName} onChange={(e) => updateReceiver(index, "guardianName", e.target.value)} />
+                      <input placeholder="Guardian NRIC *" value={receiver.guardianNric} onChange={(e) => updateReceiver(index, "guardianNric", e.target.value)} />
+                      <input placeholder="Guardian email *" value={receiver.guardianEmail} onChange={(e) => updateReceiver(index, "guardianEmail", e.target.value)} />
+                      <input placeholder="Guardian phone *" value={receiver.guardianPhone} onChange={(e) => updateReceiver(index, "guardianPhone", e.target.value)} />
+                      <input placeholder="Guardian address *" value={receiver.guardianAddress} onChange={(e) => updateReceiver(index, "guardianAddress", e.target.value)} />
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
+            ))}
+
+            {/* Add another receiver */}
+            <button
+              type="button"
+              onClick={addReceiver}
+              style={{
+                background: "white",
+                border: "1px dashed #1D9E75",
+                color: "#1D9E75",
+                borderRadius: 8,
+                padding: "8px 16px",
+                cursor: "pointer",
+                fontSize: 13,
+                fontWeight: 500,
+                width: "100%",
+                marginTop: 4,
+              }}
+            >
+              + Add another receiver
+            </button>
 
             {error && (
               <div style={{
