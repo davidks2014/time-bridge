@@ -79,6 +79,32 @@ export default function MemoryReceivedPage() {
   const [receivedCount, setReceivedCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [downloading, setDownloading] = useState(false);
+
+  async function downloadAllMemories() {
+    setDownloading(true);
+    try {
+      const res = await fetch("/api/receiver/download");
+
+      if (!res.ok) {
+        alert("Failed to download memories. Please try again.");
+        return;
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `timebridge-memories-${Date.now()}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+    } catch {
+      alert("Network error. Please try again.");
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   async function load() {
     setError("");
@@ -126,6 +152,16 @@ export default function MemoryReceivedPage() {
           Logout
         </button>
       </div>
+
+      {items.length > 0 && (
+        <button
+          onClick={downloadAllMemories}
+          disabled={downloading}
+          style={{ marginTop: 12 }}
+        >
+          {downloading ? "Preparing download..." : "Download all memories as zip"}
+        </button>
+      )}
 
       {error && <div style={{ marginTop: 16, color: "red" }}>{error}</div>}
       {loading && <div style={{ marginTop: 16 }}>Loading...</div>}
