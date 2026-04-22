@@ -682,3 +682,32 @@ model DeviceFingerprint {
   @@index([userId])
   @@index([flagged])
 }
+
+// =========================================
+// Rate Limit
+// =========================================
+// Tracks failed claim search attempts by IP address
+// Used to prevent NRIC enumeration attacks on /claim
+model RateLimit {
+  id String @id @default(cuid())
+
+  // IP address being rate limited
+  ipAddress String
+
+  // What action is being rate limited
+  // e.g. "claim-search", "claim-redeem"
+  action String
+
+  // Number of failed attempts in current window
+  attempts Int @default(1)
+
+  // When the rate limit window started
+  windowStart DateTime @default(now())
+
+  // When this record was last updated
+  updatedAt DateTime @updatedAt
+
+  @@unique([ipAddress, action])
+  @@index([ipAddress])
+  @@index([windowStart])
+}

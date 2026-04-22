@@ -73,6 +73,11 @@ export default function SelfClaimPage() {
 
       const json = await res.json();
 
+      if (res.status === 429) {
+        setSearchError(json?.error ?? "Too many attempts. Please try again later.");
+        return;
+      }
+
       if (!res.ok) {
         setSearchError(json?.error ?? "Search failed. Please try again.");
         return;
@@ -80,6 +85,11 @@ export default function SelfClaimPage() {
 
       setPendingMemories(json.memories ?? []);
       setSearched(true);
+
+      // Show warning if getting close to rate limit
+      if (json.warning) {
+        setSearchError(json.warning);
+      }
 
     } catch {
       setSearchError("Network error. Please check your connection.");
