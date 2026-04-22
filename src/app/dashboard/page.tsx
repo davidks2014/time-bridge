@@ -694,6 +694,8 @@ export default function DashboardPage() {
 
         <button onClick={() => router.push("/receivers")}>Receivers</button>
 
+        <button onClick={() => router.push("/guardian")}>Guardian Portal</button>
+
         <button onClick={() => router.push("/profile")}>
           Profile & Settings
         </button>
