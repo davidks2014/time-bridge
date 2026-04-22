@@ -413,6 +413,9 @@ model MemoryItem {
   // Optional per-item release date
   releaseDate DateTime?
   releasedAt  DateTime?
+  // When the receiver first viewed/opened this memory item
+  // Null means released but not yet viewed by receiver
+  viewedAt    DateTime?
 
   // Release status
   status MemoryItemStatus @default(DRAFT)
