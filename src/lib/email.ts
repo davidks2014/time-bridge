@@ -28,9 +28,11 @@ export function getResendClient(): Resend {
 }
 
 // ─── Sender address ───────────────────────────────────────────────────────────
-// Using Resend test address for UAT.
-// For production, replace with a verified domain email like noreply@yourdomain.com
-export const FROM_ADDRESS = "Time Bridge <onboarding@resend.dev>";
+// FROM_ADDRESS — reads from environment variable in production
+// Set RESEND_FROM_EMAIL=noreply@yourdomain.com when domain is verified
+// Falls back to Resend sandbox address for development
+export const FROM_ADDRESS =
+  process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
 
 // ─── App base URL ─────────────────────────────────────────────────────────────
 
