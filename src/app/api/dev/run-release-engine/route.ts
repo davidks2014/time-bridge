@@ -22,6 +22,7 @@ import { createOrReuseReceiverInvite } from "@/lib/invites";
 export const dynamic = "force-dynamic";
 
 export async function POST() {
+  console.log('[release-engine] RESEND_FROM_EMAIL:', process.env.RESEND_FROM_EMAIL);
   try {
     const now = new Date();
 
