@@ -320,7 +320,7 @@ export default function DashboardPage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{
                         fontFamily: "var(--font-display)",
-                        fontSize: 18,
+                        fontSize: 20,
                         fontWeight: 500,
                         color: "var(--earth)",
                         marginBottom: 4,
@@ -330,13 +330,13 @@ export default function DashboardPage() {
                       }}>
                         {memory.title}
                       </div>
-                      <div style={{ fontSize: 12, color: "var(--earth-muted)", lineHeight: 1.6 }}>
+                      <div style={{ fontSize: 15, color: "var(--earth-muted)", lineHeight: 1.6 }}>
                         For <strong>{memory.receiver.fullName}</strong>
                         <span style={{ margin: "0 6px", opacity: 0.4 }}>·</span>
                         {memory.receiver.identificationNo}
                       </div>
                       {nextRelease?.releaseDate && (
-                        <div style={{ fontSize: 11, color: "var(--earth-muted)", marginTop: 4 }}>
+                        <div style={{ fontSize: 13, color: "var(--earth-muted)", marginTop: 4 }}>
                           Releases {new Date(nextRelease.releaseDate).toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric" })}
                         </div>
                       )}

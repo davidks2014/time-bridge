@@ -157,7 +157,7 @@ export default function MemorySentPage() {
                       {/* Title */}
                       <div style={{
                         fontFamily: "var(--font-display)",
-                        fontSize: 19,
+                        fontSize: 21,
                         fontWeight: 500,
                         color: "var(--earth)",
                         marginBottom: 6,
@@ -169,26 +169,26 @@ export default function MemorySentPage() {
                       </div>
 
                       {/* Receiver */}
-                      <div style={{ fontSize: 13, color: "var(--earth-muted)", lineHeight: 1.6 }}>
+                      <div style={{ fontSize: 15, color: "var(--earth-muted)", lineHeight: 1.6 }}>
                         For <strong style={{ color: "var(--earth-mid)" }}>{memory.receiver.fullName}</strong>
                         <span style={{ margin: "0 6px", opacity: 0.4 }}>·</span>
-                        <span style={{ fontSize: 12 }}>{memory.receiver.identificationNo}</span>
+                        <span style={{ fontSize: 13 }}>{memory.receiver.identificationNo}</span>
                       </div>
 
                       {/* Meta */}
                       <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
                         {nextRelease?.releaseDate && !allReleased && (
-                          <span style={{ fontSize: 11, color: "var(--earth-muted)" }}>
+                          <span style={{ fontSize: 13, color: "var(--earth-muted)" }}>
                             📅 Releases {new Date(nextRelease.releaseDate).toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric" })}
                           </span>
                         )}
                         {latestRelease?.releasedAt && (
-                          <span style={{ fontSize: 11, color: "var(--sage)" }}>
+                          <span style={{ fontSize: 13, color: "var(--sage)" }}>
                             ✓ Released {new Date(latestRelease.releasedAt).toLocaleDateString("en-SG", { day: "numeric", month: "short", year: "numeric" })}
                           </span>
                         )}
                         {isClaimed && (
-                          <span style={{ fontSize: 11, color: "var(--sage)", fontWeight: 700 }}>
+                          <span style={{ fontSize: 13, color: "var(--sage)", fontWeight: 700 }}>
                             ✓ Claimed by recipient
                           </span>
                         )}
