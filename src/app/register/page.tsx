@@ -1,189 +1,254 @@
-/**
- * src/app/register/page.tsx
- *
- * Purpose:
- * - Simple registration — name, email, password only
- * - Google sign-in option for one-click registration
- * - NRIC, address, ID documents are collected later when
- *   the user tries to create their first memory
- *
- * This low-friction approach gets users into the app quickly
- * and collects sensitive details only when they are needed.
- */
-
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import TimeBridgeLogo from "@/components/TimeBridgeLogo";
 
 export default function RegisterPage() {
   const router = useRouter();
 
-  // Basic registration fields only
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [name, setName]         = useState("");
+  const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm]   = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
-
-  async function onSubmit() {
+  async function register() {
     setError("");
-    setInfo("");
 
-    // Validate basic fields
-    if (!name.trim()) return setError("Full name is required.");
-    if (!email.trim()) return setError("Email address is required.");
-    if (!password.trim()) return setError("Password is required.");
+    if (!name.trim())     return setError("Full name is required.");
+    if (!email.trim())    return setError("Email address is required.");
     if (password.length < 8) return setError("Password must be at least 8 characters.");
+    if (password !== confirm)  return setError("Passwords do not match.");
 
     setLoading(true);
-
     try {
-      const form = new FormData();
-      form.append("name", name.trim());
-      form.append("email", email.trim());
-      form.append("password", password);
-
       const res = await fetch("/api/auth/register", {
         method: "POST",
-        body: form,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), password }),
       });
 
       const json = await res.json();
-
       if (!res.ok) {
         setError(json?.error ?? "Registration failed. Please try again.");
         return;
       }
 
-      setInfo("Account created. Redirecting...");
-
       // Auto sign in after registration
-      await signIn("credentials", {
+      const signInRes = await signIn("credentials", {
         email: email.trim(),
         password,
         redirect: false,
       });
 
-      setTimeout(() => router.push("/dashboard"), 800);
-
+      if (signInRes?.ok) {
+        router.push("/complete-profile");
+      } else {
+        router.push("/login");
+      }
     } catch {
-      setError("Network error. Please check your connection and try again.");
+      setError("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 480, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 26, fontWeight: 900 }}>Create your account</h1>
+    <div style={{
+      minHeight: "100vh",
+      background: "var(--ivory)",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "24px 20px",
+      position: "relative",
+      overflow: "hidden",
+    }}>
 
-      <p style={{ color: "#666", marginTop: 8, fontSize: 14, lineHeight: 1.6 }}>
-        Join Time Bridge and start preserving your legacy messages
-        for the people you love.
-      </p>
+      {/* Background texture */}
+      <div style={{
+        position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
+        backgroundImage: `
+          radial-gradient(ellipse at 20% 60%, rgba(139,105,20,0.05) 0%, transparent 50%),
+          radial-gradient(ellipse at 80% 15%, rgba(92,122,92,0.05) 0%, transparent 45%)
+        `,
+      }} />
 
-      <div style={{ marginTop: 24, display: "grid", gap: 12 }}>
+      <div style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: 420 }}>
 
-        {/* ── Google sign-up — fastest option ── */}
-        <button
-          onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
-          style={{
-            width: "100%",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-            padding: "12px 16px",
-            border: "1px solid #ddd",
-            borderRadius: 8,
-            background: "white",
-            cursor: "pointer",
-            fontSize: 14,
-            fontWeight: 500,
-          }}
-        >
-          <svg width="18" height="18" viewBox="0 0 48 48">
-            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-            <path fill="none" d="M0 0h48v48H0z"/>
-          </svg>
-          Continue with Google
-        </button>
-
-        {/* ── Divider ── */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-        }}>
-          <div style={{ flex: 1, height: 1, background: "#eee" }} />
-          <span style={{ color: "#999", fontSize: 13 }}>or register with email</span>
-          <div style={{ flex: 1, height: 1, background: "#eee" }} />
+        {/* Logo */}
+        <div className="tb-fade-in" style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}>
+          <TimeBridgeLogo size="sm" variant="light" showWordmark animated />
         </div>
 
-        {/* ── Email registration ── */}
-        <input
-          placeholder="Full name *"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
+        {/* Card */}
+        <div className="tb-card tb-fade-in tb-stagger-2" style={{ padding: "36px 32px" }}>
 
-        <input
-          placeholder="Email address *"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
+          <h3 style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 24,
+            fontWeight: 400,
+            color: "var(--earth)",
+            textAlign: "center",
+            marginBottom: 6,
+          }}>
+            Begin your legacy
+          </h3>
+          <p style={{
+            fontSize: 13,
+            color: "var(--earth-muted)",
+            textAlign: "center",
+            marginBottom: 28,
+            lineHeight: 1.6,
+          }}>
+            Create an account to start preserving your memories for those you love
+          </p>
 
-        <input
-          placeholder="Password (min 8 characters) *"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+          {error && (
+            <div className="tb-banner tb-banner-error">
+              <div className="tb-banner-dot tb-banner-dot-red" />
+              <span>{error}</span>
+            </div>
+          )}
 
-        {error && (
+          <div className="tb-field">
+            <label className="tb-label">Full name</label>
+            <input
+              className="tb-input"
+              type="text"
+              placeholder="Lee Kok Sang"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoComplete="name"
+            />
+          </div>
+
+          <div className="tb-field">
+            <label className="tb-label">Email address</label>
+            <input
+              className="tb-input"
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+            />
+          </div>
+
+          <div className="tb-field">
+            <label className="tb-label">Password</label>
+            <input
+              className="tb-input"
+              type="password"
+              placeholder="At least 8 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+          </div>
+
+          <div className="tb-field">
+            <label className="tb-label">Confirm password</label>
+            <input
+              className="tb-input"
+              type="password"
+              placeholder="Repeat your password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && register()}
+              autoComplete="new-password"
+            />
+          </div>
+
+          {/* Privacy note */}
           <div style={{
             padding: "10px 14px",
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
-            borderRadius: 8,
-            color: "#991b1b",
-            fontSize: 13,
+            background: "var(--sage-pale)",
+            border: "1px solid var(--sage-light)",
+            borderRadius: "var(--radius-sm)",
+            fontSize: 12,
+            color: "#2A4A2A",
+            lineHeight: 1.6,
+            marginBottom: 20,
           }}>
-            {error}
+            Your personal details (NRIC, address) will be collected on the next step for identity verification. Time Bridge complies with PDPA.
           </div>
-        )}
 
-        {info && (
-          <div style={{
-            padding: "10px 14px",
-            background: "#f0fdf4",
-            border: "1px solid #bbf7d0",
-            borderRadius: 8,
-            color: "#166534",
-            fontSize: 13,
-          }}>
-            {info}
+          <button
+            className="tb-btn tb-btn-primary tb-btn-full"
+            onClick={register}
+            disabled={loading}
+            style={{ fontSize: 13, letterSpacing: "1.5px" }}
+          >
+            {loading ? "Creating account..." : "Create account"}
+          </button>
+
+          <div className="tb-divider" style={{ margin: "20px 0" }}>
+            <div className="tb-divider-line" />
+            <span style={{ fontSize: 12, color: "var(--earth-muted)", letterSpacing: 1 }}>or</span>
+            <div className="tb-divider-line" />
           </div>
-        )}
 
-        <button onClick={onSubmit} disabled={loading}>
-          {loading ? "Creating account..." : "Create account"}
-        </button>
+          {/* Google button */}
+          <button
+            onClick={() => signIn("google", { callbackUrl: "/complete-profile" })}
+            style={{
+              width: "100%",
+              background: "var(--ivory)",
+              border: "1px solid var(--border-dark)",
+              borderRadius: "var(--radius-md)",
+              padding: "12px 20px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 10,
+              cursor: "pointer",
+              fontFamily: "var(--font-body)",
+              fontSize: 13,
+              fontWeight: 700,
+              color: "var(--earth)",
+              transition: "all var(--transition)",
+              minHeight: 44,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--cream)";
+              e.currentTarget.style.borderColor = "var(--gold-light)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "var(--ivory)";
+              e.currentTarget.style.borderColor = "var(--border-dark)";
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            Sign up with Google
+          </button>
 
-        <button
-          onClick={() => router.push("/login")}
-          disabled={loading}
-        >
-          Already have an account? Log in
-        </button>
+        </div>
+
+        {/* Footer */}
+        <div className="tb-fade-in tb-stagger-3" style={{ textAlign: "center", marginTop: 20 }}>
+          <p style={{ fontSize: 13, color: "var(--earth-muted)" }}>
+            Already have an account?{" "}
+            <a href="/login" style={{ color: "var(--gold)", fontWeight: 700, textDecoration: "none" }}>
+              Sign in
+            </a>
+          </p>
+          <p style={{ fontSize: 12, color: "var(--earth-muted)", marginTop: 8 }}>
+            Received a memory?{" "}
+            <a href="/claim" style={{ color: "var(--sage)", textDecoration: "none", fontWeight: 700 }}>
+              Claim it here
+            </a>
+          </p>
+        </div>
 
       </div>
     </div>
