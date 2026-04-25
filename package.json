@@ -34,6 +34,7 @@
     "resend": "^6.12.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@tailwindcss/postcss": "^4",
     "@types/bcrypt": "^6.0.0",
     "@types/jszip": "^3.4.0",
