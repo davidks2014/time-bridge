@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "build:mobile": "next build && npx cap sync",
+    "build:web": "next build",
+    "build:mobile": "npx cap sync",
     "open:ios": "npx cap open ios",
     "open:android": "npx cap open android"
   },

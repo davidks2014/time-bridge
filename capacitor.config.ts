@@ -3,7 +3,11 @@ import type { CapacitorConfig } from '@capacitor/cli';
 const config: CapacitorConfig = {
   appId: 'sg.timebridge.app',
   appName: 'Time Bridge',
-  webDir: 'out',
+  webDir: 'public',
+  server: {
+    url: 'https://timebridge.sg',
+    cleartext: false,
+  },
   plugins: {
     SplashScreen: {
       launchShowDuration: 2500,
