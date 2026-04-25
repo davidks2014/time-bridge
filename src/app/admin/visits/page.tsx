@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 type Visit = {
   id: string;
@@ -161,9 +162,7 @@ export default function AdminVisitsPage() {
     }
   }
 
-  if (status === "loading" || loading) {
-    return <div style={{ padding: 20 }}>Loading visit logs...</div>;
-  }
+  if (status === "loading" || loading) return <TimeBridgeLoading message="Loading visit logs..." />;
 
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>

@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 type GuardianMemory = {
   receiverId: string;
@@ -123,13 +124,7 @@ export default function GuardianPage() {
     setHandoverSuccess("");
   }
 
-  if (status === "loading" || loading) {
-    return (
-      <div style={{ padding: 20, maxWidth: 600, margin: "0 auto" }}>
-        <p style={{ color: "#666" }}>Loading guardian portal...</p>
-      </div>
-    );
-  }
+  if (status === "loading" || loading) return <TimeBridgeLoading message="Loading guardian portal..." />;
 
   return (
     <div style={{ padding: 20, maxWidth: 600, margin: "0 auto" }}>

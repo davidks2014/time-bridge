@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 type AuditLog = {
   id: string;
@@ -86,9 +87,7 @@ export default function AdminAuditPage() {
     }
   }
 
-  if (status === "loading" || loading) {
-    return <div style={{ padding: 20 }}>Loading audit logs...</div>;
-  }
+  if (status === "loading" || loading) return <TimeBridgeLoading message="Loading audit log..." />;
 
   return (
     <div style={{ padding: 20, maxWidth: 1000, margin: "0 auto" }}>

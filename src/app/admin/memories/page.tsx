@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 type MemoryItem = {
   id: string;
@@ -95,9 +96,7 @@ export default function AdminMemoriesPage() {
     }
   }
 
-  if (status === "loading" || loading) {
-    return <div style={{ padding: 20 }}>Loading memories...</div>;
-  }
+  if (status === "loading" || loading) return <TimeBridgeLoading message="Loading memory oversight..." />;
 
   return (
     <div style={{ padding: 20, maxWidth: 1000, margin: "0 auto" }}>

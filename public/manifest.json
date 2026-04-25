@@ -1,0 +1,20 @@
+{
+  "name": "Time Bridge",
+  "short_name": "Time Bridge",
+  "description": "Store your most precious memories and deliver them to loved ones when the time comes.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF7F2",
+  "theme_color": "#8B6914",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["lifestyle", "productivity"],
+  "lang": "en-SG"
+}

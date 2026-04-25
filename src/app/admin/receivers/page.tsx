@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 type DeliveryAttempt = {
   channel: string;
@@ -122,9 +123,7 @@ export default function AdminReceiversPage() {
     return true;
   });
 
-  if (status === "loading" || loading) {
-    return <div style={{ padding: 20 }}>Loading receivers...</div>;
-  }
+  if (status === "loading" || loading) return <TimeBridgeLoading message="Loading receivers..." />;
 
   return (
     <div style={{ padding: 20, maxWidth: 1000, margin: "0 auto" }}>

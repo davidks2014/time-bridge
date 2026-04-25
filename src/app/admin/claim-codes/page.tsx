@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 type ClaimCode = {
   id: string;
@@ -79,9 +80,7 @@ export default function AdminClaimCodesPage() {
     return { bg: "#f9fafb", border: "#e5e7eb", text: "#6b7280" };
   };
 
-  if (status === "loading" || loading) {
-    return <div style={{ padding: 20 }}>Loading claim codes...</div>;
-  }
+  if (status === "loading" || loading) return <TimeBridgeLoading message="Loading claim codes..." />;
 
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>

@@ -12,6 +12,7 @@
 
 import { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 function VerifyForm() {
   const router = useRouter();
@@ -211,7 +212,7 @@ function VerifyForm() {
 
 export default function VerifyPage() {
   return (
-    <Suspense fallback={<div style={{ padding: 20 }}>Loading...</div>}>
+    <Suspense fallback={<TimeBridgeLoading message="Loading..." />}>
       <VerifyForm />
     </Suspense>
   );

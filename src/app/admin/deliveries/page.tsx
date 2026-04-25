@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 type DeliveryAttempt = {
   id: string;
@@ -85,9 +86,7 @@ export default function AdminDeliveriesPage() {
     }
   }
 
-  if (status === "loading" || loading) {
-    return <div style={{ padding: 20 }}>Loading delivery attempts...</div>;
-  }
+  if (status === "loading" || loading) return <TimeBridgeLoading message="Loading delivery attempts..." />;
 
   return (
     <div style={{ padding: 20, maxWidth: 900, margin: "0 auto" }}>

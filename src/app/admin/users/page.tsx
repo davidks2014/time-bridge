@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 type User = {
   id: string;
@@ -113,9 +114,7 @@ export default function AdminUsersPage() {
     return u.verificationStatus === filter && u.role !== "ADMIN";
   });
 
-  if (status === "loading" || loading) {
-    return <div style={{ padding: 20 }}>Loading users...</div>;
-  }
+  if (status === "loading" || loading) return <TimeBridgeLoading message="Loading users..." />;
 
   return (
     <div style={{ padding: 20, maxWidth: 1000, margin: "0 auto" }}>

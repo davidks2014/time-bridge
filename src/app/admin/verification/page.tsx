@@ -19,6 +19,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
+import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 type PendingUser = {
   id: string;
@@ -184,9 +185,7 @@ export default function AdminVerificationPage() {
     );
   }
 
-  if (status === "loading") {
-    return <div style={{ padding: 20 }}>Checking session...</div>;
-  }
+  if (status === "loading" || loading) return <TimeBridgeLoading message="Loading verification queue..." />;
 
   return (
     <div style={{ padding: 20, maxWidth: 1100, margin: "0 auto" }}>
