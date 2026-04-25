@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Time Bridge',
   webDir: 'public',
   server: {
-    url: 'https://time-bridge-git-develop-davidks2014s-projects.vercel.app',
+    url: 'https://timebridge.sg',
     cleartext: false,
     androidScheme: 'https',
   },
