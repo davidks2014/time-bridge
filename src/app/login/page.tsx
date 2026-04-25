@@ -3,6 +3,7 @@
 import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Capacitor } from "@capacitor/core";
 import TimeBridgeLogo from "@/components/TimeBridgeLogo";
 
 function LoginForm() {
@@ -14,6 +15,15 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+
+  function handleGoogleLogin() {
+    const isMobile = Capacitor.isNativePlatform();
+    signIn("google", {
+      callbackUrl: isMobile
+        ? "https://timebridge.sg/api/auth/mobile-callback"
+        : callbackUrl,
+    });
+  }
 
   async function login() {
     setError("");
@@ -137,7 +147,7 @@ function LoginForm() {
 
           {/* Google button */}
           <button
-            onClick={() => signIn("google", { callbackUrl })}
+            onClick={handleGoogleLogin}
             style={{
               width: "100%",
               background: "var(--ivory)",
