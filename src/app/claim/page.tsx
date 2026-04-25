@@ -1,22 +1,8 @@
-/**
- * src/app/claim/page.tsx
- *
- * Purpose:
- * - Self-claim page — receiver proactively searches for memories
- * - Receiver enters their NRIC to find released memories waiting for them
- * - Does NOT reveal memory content — only shows that something exists
- * - After finding a match, guides receiver to verify identity
- *
- * This handles cases where:
- * - The invite email was never received (bounced, wrong address)
- * - A guardian brings a child to claim their memory
- * - A receiver heard about Time Bridge from family
- */
-
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import TimeBridgeLogo from "@/components/TimeBridgeLogo";
 
 type PendingMemory = {
   collectionId: string;
@@ -28,69 +14,41 @@ type PendingMemory = {
   releasedAt: string;
 };
 
-export default function SelfClaimPage() {
+export default function ClaimPage() {
   const router = useRouter();
 
-  // Claim code redemption
-  const [claimCode, setClaimCode] = useState("");
-  const [claimCodeNric, setClaimCodeNric] = useState("");
-  const [redeemingCode, setRedeemingCode] = useState(false);
-  const [claimCodeError, setClaimCodeError] = useState("");
-  const [claimCodeSuccess, setClaimCodeSuccess] = useState("");
-
-  // Step 1 — NRIC search
-  const [nric, setNric] = useState("");
-  const [searching, setSearching] = useState(false);
+  // NRIC search
+  const [nric, setNric]             = useState("");
+  const [searching, setSearching]   = useState(false);
+  const [searched, setSearched]     = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [memories, setMemories]     = useState<PendingMemory[]>([]);
+  const [warning, setWarning]       = useState("");
 
-  // Step 2 — Results
-  const [pendingMemories, setPendingMemories] = useState<PendingMemory[]>([]);
-  const [searched, setSearched] = useState(false);
+  // Claim code
+  const [claimCode, setClaimCode]         = useState("");
+  const [claimCodeNric, setClaimCodeNric] = useState("");
+  const [redeeming, setRedeeming]         = useState(false);
+  const [codeError, setCodeError]         = useState("");
+  const [codeSuccess, setCodeSuccess]     = useState("");
 
   async function searchByNric() {
-    setSearchError("");
-    setPendingMemories([]);
-    setSearched(false);
-
-    const normalizedNric = nric.trim().toUpperCase();
-
-    if (!normalizedNric) {
-      return setSearchError("Please enter your NRIC or identification number.");
-    }
-
-    if (normalizedNric.length < 6) {
-      return setSearchError("Please enter a valid NRIC or identification number.");
-    }
-
+    setSearchError(""); setWarning(""); setMemories([]); setSearched(false);
+    const n = nric.trim().toUpperCase();
+    if (!n || n.length < 6) { setSearchError("Please enter a valid NRIC or identification number."); return; }
     setSearching(true);
-
     try {
-      const res = await fetch("/api/claim/search", {
+      const res  = await fetch("/api/claim/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identificationNo: normalizedNric }),
+        body: JSON.stringify({ identificationNo: n }),
       });
-
       const json = await res.json();
-
-      if (res.status === 429) {
-        setSearchError(json?.error ?? "Too many attempts. Please try again later.");
-        return;
-      }
-
-      if (!res.ok) {
-        setSearchError(json?.error ?? "Search failed. Please try again.");
-        return;
-      }
-
-      setPendingMemories(json.memories ?? []);
+      if (res.status === 429) { setSearchError(json?.error ?? "Too many attempts. Please try again later."); return; }
+      if (!res.ok)            { setSearchError(json?.error ?? "Search failed. Please try again."); return; }
+      setMemories(json.memories ?? []);
       setSearched(true);
-
-      // Show warning if getting close to rate limit
-      if (json.warning) {
-        setSearchError(json.warning);
-      }
-
+      if (json.warning) setWarning(json.warning);
     } catch {
       setSearchError("Network error. Please check your connection.");
     } finally {
@@ -98,282 +56,261 @@ export default function SelfClaimPage() {
     }
   }
 
-  async function redeemClaimCode() {
-    setClaimCodeError("");
-    setClaimCodeSuccess("");
-
-    if (!claimCode.trim()) {
-      return setClaimCodeError("Please enter your claim code.");
-    }
-    if (!claimCodeNric.trim()) {
-      return setClaimCodeError("Please enter your NRIC.");
-    }
-
-    setRedeemingCode(true);
-
+  async function redeemCode() {
+    setCodeError(""); setCodeSuccess("");
+    if (!claimCode.trim())     { setCodeError("Please enter your claim code."); return; }
+    if (!claimCodeNric.trim()) { setCodeError("Please enter your NRIC to verify your identity."); return; }
+    setRedeeming(true);
     try {
-      const res = await fetch("/api/claim/redeem", {
+      const res  = await fetch("/api/claim/redeem", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          claimCode: claimCode.trim(),
-          identificationNo: claimCodeNric.trim().toUpperCase(),
-        }),
+        body: JSON.stringify({ claimCode: claimCode.trim(), identificationNo: claimCodeNric.trim().toUpperCase() }),
       });
-
       const json = await res.json();
-
-      if (!res.ok) {
-        setClaimCodeError(json?.error ?? "Failed to redeem code. Please try again.");
-        return;
-      }
-
+      if (!res.ok) { setCodeError(json?.error ?? "Invalid code. Please try again."); return; }
       if (json.linked) {
-        // Already logged in and linked successfully
-        setClaimCodeSuccess("Memory claimed successfully! Redirecting...");
+        setCodeSuccess("Memory claimed successfully. Redirecting...");
         setTimeout(() => router.push("/memory-received"), 1500);
         return;
       }
-
       if (json.requiresLogin) {
-        // Valid code but needs to log in first
-        setClaimCodeSuccess(
-          "Claim code is valid! Please log in or create an account to complete your claim."
-        );
+        setCodeSuccess("Code verified. Please sign in to complete your claim.");
         setTimeout(() => {
-          router.push(
-            `/login?callbackUrl=/claim&claimCode=${encodeURIComponent(claimCode.trim())}&nric=${encodeURIComponent(claimCodeNric.trim())}`
-          );
+          router.push(`/login?callbackUrl=/claim&claimCode=${encodeURIComponent(claimCode.trim())}&nric=${encodeURIComponent(claimCodeNric.trim())}`);
         }, 1500);
       }
-
     } catch {
-      setClaimCodeError("Network error. Please try again.");
+      setCodeError("Network error. Please try again.");
     } finally {
-      setRedeemingCode(false);
+      setRedeeming(false);
     }
   }
 
   function handleClaim(memory: PendingMemory) {
-    // If there is an invite token, go to the invite claim page
     if (memory.inviteToken) {
       router.push(`/receiver/invite/${memory.inviteToken}/claim`);
-      return;
+    } else {
+      router.push(`/claim/verify?receiverId=${memory.receiverId}&collectionId=${memory.collectionId}`);
     }
-
-    // No invite token — go to the manual claim flow
-    router.push(`/claim/verify?receiverId=${memory.receiverId}&collectionId=${memory.collectionId}`);
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 560, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 900 }}>Claim your memory</h1>
+    <div style={{
+      minHeight: "100vh",
+      background: "var(--ivory)",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "flex-start",
+      padding: "32px 20px 48px",
+    }}>
 
-      <p style={{ color: "#666", marginTop: 8, fontSize: 14, lineHeight: 1.6 }}>
-        Someone may have left a personal message for you on Time Bridge.
-        Enter your NRIC or identification number to find out.
-      </p>
-
-      {/* ── Claim code section ── */}
+      {/* Background */}
       <div style={{
-        marginTop: 24,
-        padding: 16,
-        background: "#f0fdf8",
-        border: "1px solid #6ee7b7",
-        borderRadius: 12,
-      }}>
-        <div style={{ fontWeight: 900, fontSize: 15, color: "#065f46" }}>
-          Have a claim code?
+        position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
+        backgroundImage: `
+          radial-gradient(ellipse at 10% 40%, rgba(92,122,92,0.05) 0%, transparent 50%),
+          radial-gradient(ellipse at 90% 70%, rgba(139,105,20,0.04) 0%, transparent 45%)
+        `,
+      }} />
+
+      <div style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: 480 }}>
+
+        {/* Logo */}
+        <div className="tb-fade-in" style={{ display: "flex", justifyContent: "center", marginBottom: 32, cursor: "pointer" }}
+             onClick={() => router.push("/login")}>
+          <TimeBridgeLogo size="sm" variant="light" showWordmark animated />
         </div>
-        <div style={{ color: "#047857", fontSize: 13, marginTop: 6, lineHeight: 1.6 }}>
-          If an admin gave you a claim code during a visit, enter it here
-          along with your NRIC to fast-track your claim.
+
+        {/* Title */}
+        <div className="tb-fade-in tb-stagger-1" style={{ textAlign: "center", marginBottom: 32 }}>
+          <h2 style={{ marginBottom: 8 }}>Claim your memory</h2>
+          <p style={{ fontSize: 14, color: "var(--earth-muted)", lineHeight: 1.7 }}>
+            Someone may have left a personal message for you.<br />
+            Search by NRIC or enter a claim code below.
+          </p>
         </div>
 
-        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-          <input
-            placeholder="Claim code (e.g. TB-K3X9M2QP)"
-            value={claimCode}
-            onChange={(e) => setClaimCode(e.target.value.toUpperCase())}
-            style={{ letterSpacing: 2 }}
-          />
-          <input
-            placeholder="Your NRIC to confirm identity"
-            value={claimCodeNric}
-            onChange={(e) => setClaimCodeNric(e.target.value.toUpperCase())}
-          />
-
-          {claimCodeError && (
-            <div style={{
-              padding: "8px 12px",
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: 8,
-              color: "#991b1b",
-              fontSize: 13,
-            }}>
-              {claimCodeError}
-            </div>
-          )}
-
-          {claimCodeSuccess && (
-            <div style={{
-              padding: "8px 12px",
-              background: "#f0fdf4",
-              border: "1px solid #bbf7d0",
-              borderRadius: 8,
-              color: "#166534",
-              fontSize: 13,
-            }}>
-              {claimCodeSuccess}
-            </div>
-          )}
-
-          <button onClick={redeemClaimCode} disabled={redeemingCode}>
-            {redeemingCode ? "Validating..." : "Redeem claim code"}
-          </button>
-        </div>
-      </div>
-
-      {/* ── Divider ── */}
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        margin: "24px 0",
-      }}>
-        <div style={{ flex: 1, height: 1, background: "#eee" }} />
-        <span style={{ color: "#999", fontSize: 13 }}>or search by NRIC</span>
-        <div style={{ flex: 1, height: 1, background: "#eee" }} />
-      </div>
-
-      {/* ── NRIC search ── */}
-      <div style={{ display: "grid", gap: 12 }}>
-        <input
-          placeholder="NRIC / identification number"
-          value={nric}
-          onChange={(e) => setNric(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && searchByNric()}
-          style={{ textTransform: "uppercase" }}
-        />
-
-        {searchError && (
-          <div style={{
-            padding: "10px 14px",
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
-            borderRadius: 8,
-            color: "#991b1b",
-            fontSize: 13,
-          }}>
-            {searchError}
-          </div>
-        )}
-
-        <button onClick={searchByNric} disabled={searching}>
-          {searching ? "Searching..." : "Search for my memory"}
-        </button>
-
-        <button onClick={() => router.push("/login")}>
-          I already have an account — log in
-        </button>
-      </div>
-
-      {/* ── No results ── */}
-      {searched && pendingMemories.length === 0 && (
-        <div style={{
-          marginTop: 24,
-          padding: 16,
-          background: "#f9fafb",
-          border: "1px solid #eee",
-          borderRadius: 12,
+        {/* ── Claim code section ── */}
+        <div className="tb-card tb-fade-in tb-stagger-2" style={{
+          padding: "20px 24px",
+          marginBottom: 20,
+          borderLeft: "4px solid var(--gold)",
         }}>
-          <div style={{ fontWeight: 700, color: "#374151" }}>
-            No memories found
-          </div>
-          <div style={{ color: "#6b7280", fontSize: 13, marginTop: 6, lineHeight: 1.6 }}>
-            We did not find any released memories for NRIC <b>{nric.toUpperCase()}</b>.
-            This could mean:
-          </div>
-          <ul style={{ color: "#6b7280", fontSize: 13, marginTop: 8, paddingLeft: 20, lineHeight: 1.8 }}>
-            <li>No one has left a memory for you yet</li>
-            <li>The memory has not been released yet</li>
-            <li>The sender used a different NRIC for you</li>
-          </ul>
-          <div style={{ color: "#6b7280", fontSize: 13, marginTop: 8 }}>
-            If you believe there should be a memory for you, please contact our support team.
-          </div>
-        </div>
-      )}
+          <div className="tb-section-label" style={{ marginBottom: 12 }}>Have a claim code?</div>
+          <p style={{ fontSize: 13, color: "var(--earth-muted)", marginBottom: 16, lineHeight: 1.6 }}>
+            If a Time Bridge representative gave you a printed claim code during a visit, enter it here.
+          </p>
 
-      {/* ── Results found ── */}
-      {pendingMemories.length > 0 && (
-        <div style={{ marginTop: 24 }}>
-          <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 12 }}>
-            {pendingMemories.length === 1
-              ? "1 memory is waiting for you"
-              : `${pendingMemories.length} memories are waiting for you`}
-          </div>
+          <div style={{ display: "grid", gap: 10 }}>
+            <input
+              className="tb-input"
+              placeholder="Claim code — e.g. TB-K3X9M2QP"
+              value={claimCode}
+              onChange={(e) => setClaimCode(e.target.value.toUpperCase())}
+              style={{ letterSpacing: "2px", fontWeight: 700 }}
+            />
+            <input
+              className="tb-input"
+              placeholder="Your NRIC to confirm identity"
+              value={claimCodeNric}
+              onChange={(e) => setClaimCodeNric(e.target.value.toUpperCase())}
+            />
 
-          <div style={{ display: "grid", gap: 12 }}>
-            {pendingMemories.map((memory) => (
-              <div
-                key={memory.collectionId}
-                style={{
-                  padding: 16,
-                  background: "#f0fdf8",
-                  border: "1px solid #6ee7b7",
-                  borderRadius: 12,
-                }}
-              >
-                <div style={{ fontWeight: 700, color: "#065f46" }}>
-                  A personal message has been left for {memory.receiverName}
-                </div>
-                <div style={{ color: "#047857", fontSize: 13, marginTop: 6 }}>
-                  From: <b>{memory.senderName}</b>
-                </div>
-                <div style={{ color: "#6b7280", fontSize: 12, marginTop: 4 }}>
-                  Released: {new Date(memory.releasedAt).toLocaleDateString("en-SG")}
-                </div>
-
-                {/* Important — never show content, only show it exists */}
-                <div style={{
-                  marginTop: 10,
-                  padding: "8px 12px",
-                  background: "#fffbeb",
-                  border: "1px solid #fde68a",
-                  borderRadius: 6,
-                  fontSize: 12,
-                  color: "#92400e",
-                }}>
-                  You will be able to read this message after verifying your identity.
-                </div>
-
-                <button
-                  onClick={() => handleClaim(memory)}
-                  style={{ marginTop: 12, width: "100%" }}
-                >
-                  Verify my identity and claim this memory
-                </button>
+            {codeError && (
+              <div className="tb-banner tb-banner-error" style={{ margin: 0 }}>
+                <div className="tb-banner-dot tb-banner-dot-red" />
+                <span>{codeError}</span>
               </div>
-            ))}
+            )}
+
+            {codeSuccess && (
+              <div className="tb-banner tb-banner-sage" style={{ margin: 0 }}>
+                <div className="tb-banner-dot tb-banner-dot-sage" />
+                <span>{codeSuccess}</span>
+              </div>
+            )}
+
+            <button
+              className="tb-btn tb-btn-gold tb-btn-full"
+              onClick={redeemCode}
+              disabled={redeeming}
+              style={{ fontSize: 12, letterSpacing: "1px" }}
+            >
+              {redeeming ? "Verifying..." : "Redeem claim code"}
+            </button>
           </div>
         </div>
-      )}
 
-      {/* ── Privacy note ── */}
-      <div style={{
-        marginTop: 32,
-        padding: "10px 14px",
-        background: "#f9fafb",
-        border: "1px solid #eee",
-        borderRadius: 8,
-        fontSize: 12,
-        color: "#9ca3af",
-        lineHeight: 1.6,
-      }}>
-        Your NRIC is used only to search for memories addressed to you.
-        It is not stored from this search. Time Bridge complies with PDPA.
+        {/* Divider */}
+        <div className="tb-divider tb-fade-in tb-stagger-3">
+          <div className="tb-divider-line" />
+          <span style={{ fontSize: 12, color: "var(--earth-muted)", letterSpacing: 1, whiteSpace: "nowrap" }}>
+            or search by NRIC
+          </span>
+          <div className="tb-divider-line" />
+        </div>
+
+        {/* ── NRIC search ── */}
+        <div className="tb-card tb-fade-in tb-stagger-3" style={{ padding: "20px 24px", marginTop: 20 }}>
+          <div className="tb-section-label" style={{ marginBottom: 12 }}>Search for your memory</div>
+
+          <div style={{ display: "grid", gap: 10 }}>
+            <input
+              className="tb-input"
+              placeholder="NRIC / identification number"
+              value={nric}
+              onChange={(e) => setNric(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === "Enter" && searchByNric()}
+              style={{ letterSpacing: "1px" }}
+            />
+
+            {searchError && (
+              <div className="tb-banner tb-banner-error" style={{ margin: 0 }}>
+                <div className="tb-banner-dot tb-banner-dot-red" />
+                <span>{searchError}</span>
+              </div>
+            )}
+
+            {warning && (
+              <div className="tb-banner tb-banner-gold" style={{ margin: 0 }}>
+                <div className="tb-banner-dot tb-banner-dot-gold" />
+                <span>{warning}</span>
+              </div>
+            )}
+
+            <button
+              className="tb-btn tb-btn-primary tb-btn-full"
+              onClick={searchByNric}
+              disabled={searching}
+              style={{ fontSize: 12, letterSpacing: "1px" }}
+            >
+              {searching ? "Searching..." : "Search for my memory"}
+            </button>
+          </div>
+
+          {/* No results */}
+          {searched && memories.length === 0 && (
+            <div className="tb-fade-in" style={{
+              marginTop: 20,
+              padding: "16px",
+              background: "var(--parchment)",
+              borderRadius: "var(--radius-md)",
+              border: "1px solid var(--sand)",
+            }}>
+              <div style={{ fontWeight: 700, color: "var(--earth-mid)", marginBottom: 6 }}>
+                No memories found for <em>{nric}</em>
+              </div>
+              <div style={{ fontSize: 13, color: "var(--earth-muted)", lineHeight: 1.7 }}>
+                This could mean the memory has not been released yet, or a different NRIC was used. Contact our support team if you believe there should be a memory for you.
+              </div>
+            </div>
+          )}
+
+          {/* Results */}
+          {memories.length > 0 && (
+            <div className="tb-fade-in" style={{ marginTop: 20 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--earth-mid)", marginBottom: 12 }}>
+                {memories.length === 1 ? "1 memory is waiting for you" : `${memories.length} memories are waiting for you`}
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {memories.map((memory) => (
+                  <div key={memory.collectionId} style={{
+                    padding: "16px 18px",
+                    background: "var(--sage-pale)",
+                    border: "1px solid var(--sage-light)",
+                    borderRadius: "var(--radius-md)",
+                  }}>
+                    <div style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 500, color: "var(--earth)", marginBottom: 4 }}>
+                      A personal message for {memory.receiverName}
+                    </div>
+                    <div style={{ fontSize: 13, color: "var(--earth-muted)", marginBottom: 4 }}>
+                      From <strong>{memory.senderName}</strong>
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--earth-muted)", marginBottom: 14 }}>
+                      Released {new Date(memory.releasedAt).toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric" })}
+                    </div>
+                    <div style={{
+                      padding: "8px 12px",
+                      background: "var(--gold-pale)",
+                      border: "1px solid var(--gold-light)",
+                      borderRadius: "var(--radius-sm)",
+                      fontSize: 12,
+                      color: "var(--earth-mid)",
+                      marginBottom: 14,
+                      lineHeight: 1.6,
+                    }}>
+                      You will be able to read this message after verifying your identity.
+                    </div>
+                    <button
+                      className="tb-btn tb-btn-sage tb-btn-full"
+                      onClick={() => handleClaim(memory)}
+                      style={{ fontSize: 12, letterSpacing: "0.5px" }}
+                    >
+                      Verify my identity and claim →
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="tb-fade-in tb-stagger-4" style={{ textAlign: "center", marginTop: 24 }}>
+          <p style={{ fontSize: 12, color: "var(--earth-muted)", lineHeight: 1.6 }}>
+            Already have an account?{" "}
+            <a href="/login" style={{ color: "var(--gold)", fontWeight: 700, textDecoration: "none" }}>
+              Sign in
+            </a>
+          </p>
+          <p style={{ fontSize: 11, color: "var(--earth-muted)", marginTop: 12, lineHeight: 1.6 }}>
+            Your NRIC is used only to search for memories addressed to you and is not stored from this search. Time Bridge complies with PDPA.
+          </p>
+        </div>
+
       </div>
     </div>
   );
