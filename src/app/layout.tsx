@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Providers from "./providers";
 import Navbar from "@/components/Navbar";
+import CapacitorBridge from "@/components/CapacitorBridge";
 import "@/styles/timebridge.css";
 
 export const metadata: Metadata = {
@@ -47,6 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <Providers>
+          <CapacitorBridge />
           <Navbar />
           {children}
         </Providers>
