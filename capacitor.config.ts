@@ -10,6 +10,9 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
   },
   plugins: {
+    App: {
+      appUrlOpen: true,
+    },
     SplashScreen: {
       launchShowDuration: 2500,
       backgroundColor: '#FAF7F2',

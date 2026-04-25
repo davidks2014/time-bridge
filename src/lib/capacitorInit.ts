@@ -20,4 +20,13 @@ export async function initCapacitor(): Promise<void> {
       App.exitApp();
     }
   });
+
+  App.addListener('appUrlOpen', (event: any) => {
+    const url = event.url as string;
+    if (url.includes('sgtimebridge://login')) {
+      const params = new URL(url.replace('sgtimebridge://', 'https://placeholder/')).searchParams;
+      const next = params.get('next') ?? '/dashboard';
+      window.location.href = next.startsWith('/') ? next : '/dashboard';
+    }
+  });
 }
