@@ -1,103 +1,88 @@
-/**
- * src/app/complete-profile/page.tsx
- *
- * Purpose:
- * - Shown to Google users after their first login
- * - They need to provide NRIC, phone, address to complete their profile
- * - Without this, they cannot create memories
- * - After completing, they go through admin verification like normal users
- */
-
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import TimeBridgeLogo from "@/components/TimeBridgeLogo";
+import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 export default function CompleteProfilePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [identificationNo, setIdentificationNo] = useState("");
-  const [address, setAddress] = useState("");
-  const [idFront, setIdFront] = useState<File | null>(null);
-  const [idBack, setIdBack] = useState<File | null>(null);
+  const [step, setStep]         = useState(1);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");
 
-  // Consent checkboxes — required for PDPA compliance
-  const [consentDataCollection, setConsentDataCollection] = useState(false);
-  const [consentLegacyDelivery, setConsentLegacyDelivery] = useState(false);
-  const [consentReceiverContact, setConsentReceiverContact] = useState(false);
-  const [consentTerms, setConsentTerms] = useState(false);
+  // Fields
+  const [idNo, setIdNo]         = useState("");
+  const [phone, setPhone]       = useState("");
+  const [address, setAddress]   = useState("");
+  const [idFront, setIdFront]   = useState<File | null>(null);
+  const [idBack, setIdBack]     = useState<File | null>(null);
+  const [consents, setConsents] = useState({
+    dataStorage: false,
+    identity: false,
+    legacy: false,
+    terms: false,
+  });
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [info, setInfo] = useState("");
+  const fileRef  = useRef<HTMLInputElement>(null);
+  const fileRef2 = useRef<HTMLInputElement>(null);
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
 
-  // If profile is already complete, redirect to dashboard
-  useEffect(() => {
-    if (status === "authenticated") {
-      const profileComplete = (session?.user as any)?.profileComplete;
-      if (profileComplete) router.push("/dashboard");
-    }
-  }, [status, session, router]);
+  if (status === "loading") return <TimeBridgeLoading message="Just a moment..." />;
 
-  async function onSubmit() {
+  const allConsents = Object.values(consents).every(Boolean);
+
+  function validateStep1() {
+    if (!idNo.trim())    { setError("NRIC is required."); return false; }
+    if (idNo.length < 7) { setError("Please enter a valid NRIC."); return false; }
+    if (!phone.trim())   { setError("Phone number is required."); return false; }
+    if (!address.trim()) { setError("Address is required."); return false; }
+    return true;
+  }
+
+  function validateStep2() {
+    if (!idFront) { setError("Please upload your NRIC front image."); return false; }
+    return true;
+  }
+
+  function validateStep3() {
+    if (!allConsents) { setError("Please agree to all consent statements."); return false; }
+    return true;
+  }
+
+  function goNext() {
     setError("");
-    setInfo("");
+    if (step === 1 && !validateStep1()) return;
+    if (step === 2 && !validateStep2()) return;
+    setStep((s) => s + 1);
+  }
 
-    // Validate required fields
-    if (!phoneNumber.trim()) return setError("Phone number is required.");
-    if (!identificationNo.trim()) return setError("NRIC is required.");
-    if (!address.trim()) return setError("Address is required.");
-    if (!idFront) return setError("Please upload your NRIC front image.");
-
-    // Validate all consents
-    if (!consentDataCollection) return setError("Please agree to data collection.");
-    if (!consentLegacyDelivery) return setError("Please agree to legacy delivery terms.");
-    if (!consentReceiverContact) return setError("Please agree to receiver contact consent.");
-    if (!consentTerms) return setError("Please agree to the Terms of Service.");
+  async function submit() {
+    setError("");
+    if (!validateStep3()) return;
 
     setLoading(true);
-
     try {
       const form = new FormData();
-      form.append("phoneNumber", phoneNumber.trim());
-      form.append("identificationNo", identificationNo.trim());
-      form.append("address", address.trim());
-      form.append("idFront", idFront);
-      if (idBack) form.append("idBack", idBack);
-      form.append("consentDataCollection", "true");
-      form.append("consentLegacyDelivery", "true");
-      form.append("consentReceiverContact", "true");
-      form.append("consentTerms", "true");
+      form.append("identificationNo", idNo.trim().toUpperCase());
+      form.append("phoneNumber",      phone.trim());
+      form.append("address",          address.trim());
+      form.append("consentAgreed",    "true");
+      if (idFront) form.append("idFront", idFront);
+      if (idBack)  form.append("idBack",  idBack);
 
-      const res = await fetch("/api/auth/complete-profile", {
-        method: "POST",
-        body: form,
-      });
-
+      const res  = await fetch("/api/auth/complete-profile", { method: "POST", body: form });
       const json = await res.json();
 
-      if (!res.ok) {
-        setError(json?.error ?? "Failed to save profile. Please try again.");
-        return;
-      }
+      if (!res.ok) { setError(json?.error ?? "Submission failed. Please try again."); return; }
 
-      setInfo("Profile completed successfully. Redirecting...");
-
-      // Force session refresh so the JWT token picks up the new profile data
-      // Without this, the dashboard still shows the old incomplete state
-      await fetch("/api/auth/session?update", { method: "GET" });
-
-      // Small delay to allow session to refresh
-      setTimeout(() => router.push("/pending-verification"), 1500);
-
+      router.push("/dashboard");
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -105,158 +90,351 @@ export default function CompleteProfilePage() {
     }
   }
 
-  if (status === "loading") return <div style={{ padding: 20 }}>Loading...</div>;
+  const steps = [
+    { num: 1, label: "Details" },
+    { num: 2, label: "Identity" },
+    { num: 3, label: "Consent" },
+  ];
 
   return (
-    <div style={{ padding: 20, maxWidth: 520, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 900 }}>Complete your profile</h1>
+    <div style={{
+      minHeight: "100vh",
+      background: "var(--ivory)",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      padding: "32px 20px 48px",
+    }}>
 
-      <p style={{ color: "#666", marginTop: 8, fontSize: 14, lineHeight: 1.6 }}>
-        Welcome to Time Bridge. To create and deliver legacy messages,
-        we need a few more details to verify your identity.
-      </p>
+      {/* Background */}
+      <div style={{
+        position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
+        backgroundImage: `radial-gradient(ellipse at 80% 20%, rgba(139,105,20,0.04) 0%, transparent 50%)`,
+      }} />
 
-      <div style={{ marginTop: 24, display: "grid", gap: 12 }}>
+      <div style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: 480 }}>
 
-        <div style={{ fontWeight: 900, fontSize: 15 }}>Your details</div>
-
-        <input
-          placeholder="Singapore phone number *"
-          value={phoneNumber}
-          onChange={(e) => setPhoneNumber(e.target.value)}
-        />
-
-        <input
-          placeholder="NRIC / identification number *"
-          value={identificationNo}
-          onChange={(e) => setIdentificationNo(e.target.value)}
-        />
-
-        <input
-          placeholder="Full residential address *"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-        />
-
-        <div style={{ fontWeight: 900, fontSize: 15, marginTop: 8 }}>
-          Identity verification
+        {/* Logo */}
+        <div className="tb-fade-in" style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
+          <TimeBridgeLogo size="sm" variant="light" showWordmark={false} animated={false} />
         </div>
 
-        <div style={{ color: "#666", fontSize: 13 }}>
-          Upload a photo of your NRIC. Front is required, back is optional.
+        {/* Header */}
+        <div className="tb-fade-in tb-stagger-1" style={{ textAlign: "center", marginBottom: 28 }}>
+          <h2 style={{ marginBottom: 8 }}>Complete your profile</h2>
+          <p style={{ fontSize: 13, color: "var(--earth-muted)", lineHeight: 1.7 }}>
+            Welcome, <strong>{session?.user?.name}</strong>. Before you can create memories,
+            we need to verify your identity. This keeps Time Bridge safe and trustworthy.
+          </p>
         </div>
 
-        <div>
-          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>
-            Front image *
+        {/* Step indicator */}
+        <div className="tb-card tb-fade-in tb-stagger-2" style={{ padding: "20px 24px", marginBottom: 20 }}>
+
+          {/* Steps */}
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 24 }}>
+            {steps.map((s, i) => (
+              <div key={s.num} style={{ display: "flex", alignItems: "center", flex: i < steps.length - 1 ? 1 : "unset" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{
+                    width: 32, height: 32,
+                    borderRadius: "50%",
+                    background: step > s.num ? "var(--sage)" : step === s.num ? "var(--gold)" : "var(--parchment)",
+                    border: `2px solid ${step > s.num ? "var(--sage)" : step === s.num ? "var(--gold)" : "var(--border-dark)"}`,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: step >= s.num ? "var(--ivory)" : "var(--earth-muted)",
+                    transition: "all var(--transition)",
+                    flexShrink: 0,
+                  }}>
+                    {step > s.num ? "✓" : s.num}
+                  </div>
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: step === s.num ? "var(--gold)" : step > s.num ? "var(--sage)" : "var(--earth-muted)",
+                    letterSpacing: "0.5px",
+                    display: "none",
+                  }}
+                  className="step-label-desktop">
+                    {s.label}
+                  </span>
+                </div>
+                {i < steps.length - 1 && (
+                  <div style={{
+                    flex: 1,
+                    height: 1,
+                    background: step > s.num ? "var(--sage-light)" : "var(--border)",
+                    margin: "0 8px",
+                    transition: "background var(--transition)",
+                  }} />
+                )}
+              </div>
+            ))}
           </div>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={(e) => setIdFront(e.target.files?.[0] ?? null)}
-          />
-          {idFront && (
-            <div style={{ marginTop: 4, fontSize: 12, color: "#1D9E75" }}>
-              Selected: {idFront.name}
+
+          {error && (
+            <div className="tb-banner tb-banner-error" style={{ marginBottom: 20 }}>
+              <div className="tb-banner-dot tb-banner-dot-red" />
+              <span>{error}</span>
             </div>
           )}
+
+          {/* ── Step 1: Personal details ── */}
+          {step === 1 && (
+            <div className="tb-fade-in">
+              <div className="tb-section-label" style={{ marginBottom: 16 }}>Personal details</div>
+
+              <div className="tb-field">
+                <label className="tb-label">NRIC / identification number *</label>
+                <input
+                  className="tb-input"
+                  placeholder="e.g. S1234567A"
+                  value={idNo}
+                  onChange={(e) => setIdNo(e.target.value.toUpperCase())}
+                  autoComplete="off"
+                />
+                <span style={{ fontSize: 11, color: "var(--earth-muted)" }}>
+                  Singapore NRIC, FIN, or other national ID
+                </span>
+              </div>
+
+              <div className="tb-field">
+                <label className="tb-label">Phone number *</label>
+                <input
+                  className="tb-input"
+                  type="tel"
+                  placeholder="e.g. 91234567"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  autoComplete="tel"
+                />
+              </div>
+
+              <div className="tb-field">
+                <label className="tb-label">Residential address *</label>
+                <input
+                  className="tb-input"
+                  placeholder="Block, street, unit number, postal code"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  autoComplete="street-address"
+                />
+              </div>
+
+              <div style={{
+                padding: "12px 16px",
+                background: "var(--sage-pale)",
+                border: "1px solid var(--sage-light)",
+                borderRadius: "var(--radius-sm)",
+                fontSize: 12,
+                color: "#2A4A2A",
+                lineHeight: 1.6,
+              }}>
+                Your NRIC and address are stored securely and used only for identity verification. This is required by Singapore law for legacy message services.
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 2: Identity documents ── */}
+          {step === 2 && (
+            <div className="tb-fade-in">
+              <div className="tb-section-label" style={{ marginBottom: 8 }}>Identity verification</div>
+              <p style={{ fontSize: 13, color: "var(--earth-muted)", marginBottom: 20, lineHeight: 1.6 }}>
+                Please upload a clear photo of your NRIC. This is reviewed by our team to confirm your identity before your account is approved.
+              </p>
+
+              {/* Front */}
+              <div className="tb-field">
+                <label className="tb-label">NRIC front *</label>
+                {idFront ? (
+                  <div style={{
+                    padding: "12px 16px",
+                    background: "var(--sage-pale)",
+                    border: "1px solid var(--sage-light)",
+                    borderRadius: "var(--radius-sm)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    fontSize: 13,
+                  }}>
+                    <span style={{ color: "var(--earth-mid)" }}>🪪 {idFront.name}</span>
+                    <button onClick={() => setIdFront(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--earth-muted)", fontSize: 18, lineHeight: 1 }}>×</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    style={{
+                      width: "100%",
+                      background: "var(--ivory)",
+                      border: "2px dashed var(--border-dark)",
+                      borderRadius: "var(--radius-md)",
+                      padding: "28px 20px",
+                      cursor: "pointer",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 8,
+                      transition: "all var(--transition)",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = "var(--gold-light)";
+                      e.currentTarget.style.background = "var(--gold-pale)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = "var(--border-dark)";
+                      e.currentTarget.style.background = "var(--ivory)";
+                    }}
+                  >
+                    <span style={{ fontSize: 28 }}>📷</span>
+                    <span style={{ fontSize: 13, color: "var(--earth-muted)", fontWeight: 700 }}>Upload NRIC front</span>
+                    <span style={{ fontSize: 11, color: "var(--earth-muted)" }}>JPG, PNG or WebP — max 5MB</span>
+                  </button>
+                )}
+                <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={(e) => setIdFront(e.target.files?.[0] ?? null)} />
+              </div>
+
+              {/* Back */}
+              <div className="tb-field">
+                <label className="tb-label">NRIC back (optional)</label>
+                {idBack ? (
+                  <div style={{
+                    padding: "12px 16px",
+                    background: "var(--sage-pale)",
+                    border: "1px solid var(--sage-light)",
+                    borderRadius: "var(--radius-sm)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    fontSize: 13,
+                  }}>
+                    <span style={{ color: "var(--earth-mid)" }}>🪪 {idBack.name}</span>
+                    <button onClick={() => setIdBack(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--earth-muted)", fontSize: 18, lineHeight: 1 }}>×</button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fileRef2.current?.click()}
+                    style={{
+                      width: "100%",
+                      background: "var(--ivory)",
+                      border: "1px dashed var(--border-dark)",
+                      borderRadius: "var(--radius-md)",
+                      padding: "16px",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      color: "var(--earth-muted)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      minHeight: 48,
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.borderColor = "var(--gold-light)"}
+                    onMouseLeave={(e) => e.currentTarget.style.borderColor = "var(--border-dark)"}
+                  >
+                    + Upload NRIC back
+                  </button>
+                )}
+                <input ref={fileRef2} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={(e) => setIdBack(e.target.files?.[0] ?? null)} />
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: Consent ── */}
+          {step === 3 && (
+            <div className="tb-fade-in">
+              <div className="tb-section-label" style={{ marginBottom: 16 }}>Consent & agreement</div>
+              <p style={{ fontSize: 13, color: "var(--earth-muted)", marginBottom: 20, lineHeight: 1.6 }}>
+                Please read and agree to all of the following before we submit your profile for review.
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {[
+                  {
+                    key: "dataStorage" as const,
+                    text: "I consent to Time Bridge storing my personal information (name, NRIC, address, phone) for the purpose of identity verification and legacy message delivery.",
+                  },
+                  {
+                    key: "identity" as const,
+                    text: "I confirm that the identity documents I have uploaded are genuine and belong to me. I understand that providing false documents is a criminal offence.",
+                  },
+                  {
+                    key: "legacy" as const,
+                    text: "I understand that Time Bridge will hold my legacy messages securely and release them to my designated receivers according to the conditions I set.",
+                  },
+                  {
+                    key: "terms" as const,
+                    text: "I agree to the Time Bridge Terms of Service and Privacy Policy, and acknowledge that I have read and understood the PDPA data handling practices.",
+                  },
+                ].map((item) => (
+                  <label key={item.key} className="tb-checkbox-label" style={{
+                    padding: "12px 14px",
+                    background: consents[item.key] ? "var(--sage-pale)" : "var(--ivory)",
+                    border: `1px solid ${consents[item.key] ? "var(--sage-light)" : "var(--border)"}`,
+                    borderRadius: "var(--radius-sm)",
+                    transition: "all var(--transition)",
+                    cursor: "pointer",
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={consents[item.key]}
+                      onChange={(e) => setConsents((prev) => ({ ...prev, [item.key]: e.target.checked }))}
+                    />
+                    <span style={{ fontSize: 12, lineHeight: 1.6, color: "var(--earth-mid)" }}>
+                      {item.text}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Navigation */}
+          <div style={{ display: "flex", gap: 10, marginTop: 24 }}>
+            {step > 1 && (
+              <button
+                className="tb-btn tb-btn-outline"
+                onClick={() => { setError(""); setStep((s) => s - 1); }}
+                style={{ flex: 1, fontSize: 12 }}
+              >
+                Back
+              </button>
+            )}
+            {step < 3 ? (
+              <button
+                className="tb-btn tb-btn-primary"
+                onClick={goNext}
+                style={{ flex: 2, fontSize: 12, letterSpacing: "1px" }}
+              >
+                Continue →
+              </button>
+            ) : (
+              <button
+                className="tb-btn tb-btn-gold"
+                onClick={submit}
+                disabled={loading || !allConsents}
+                style={{ flex: 2, fontSize: 12, letterSpacing: "1px" }}
+              >
+                {loading ? "Submitting..." : "Submit for verification"}
+              </button>
+            )}
+          </div>
         </div>
 
-        <div>
-          <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>
-            Back image (optional)
-          </div>
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={(e) => setIdBack(e.target.files?.[0] ?? null)}
-          />
+        {/* Trust badge */}
+        <div className="tb-fade-in tb-stagger-3" style={{
+          textAlign: "center",
+          fontSize: 11,
+          color: "var(--earth-muted)",
+          lineHeight: 1.7,
+          padding: "0 20px",
+        }}>
+          🔒 Your data is encrypted and stored securely in Singapore.<br />
+          Time Bridge complies with the Personal Data Protection Act (PDPA).
         </div>
-
-        <div style={{ fontWeight: 900, fontSize: 15, marginTop: 8 }}>
-          Your consent
-        </div>
-
-        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={consentDataCollection}
-            onChange={(e) => setConsentDataCollection(e.target.checked)}
-            style={{ marginTop: 3, flexShrink: 0 }}
-          />
-          <span style={{ fontSize: 13, lineHeight: 1.6, color: "#444" }}>
-            I understand that Time Bridge will securely store my personal
-            information and my receiver's details for legacy message delivery.
-          </span>
-        </label>
-
-        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={consentLegacyDelivery}
-            onChange={(e) => setConsentLegacyDelivery(e.target.checked)}
-            style={{ marginTop: 3, flexShrink: 0 }}
-          />
-          <span style={{ fontSize: 13, lineHeight: 1.6, color: "#444" }}>
-            I understand my messages will be delivered to my chosen receiver
-            upon the conditions I set. I accept responsibility for my content.
-          </span>
-        </label>
-
-        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={consentReceiverContact}
-            onChange={(e) => setConsentReceiverContact(e.target.checked)}
-            style={{ marginTop: 3, flexShrink: 0 }}
-          />
-          <span style={{ fontSize: 13, lineHeight: 1.6, color: "#444" }}>
-            I confirm I have the right to provide my receiver's personal details
-            and consent to Time Bridge contacting them on my behalf.
-          </span>
-        </label>
-
-        <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={consentTerms}
-            onChange={(e) => setConsentTerms(e.target.checked)}
-            style={{ marginTop: 3, flexShrink: 0 }}
-          />
-          <span style={{ fontSize: 13, lineHeight: 1.6, color: "#444" }}>
-            I agree to the Terms of Service and Privacy Policy.
-          </span>
-        </label>
-
-        {error && (
-          <div style={{
-            padding: "10px 14px",
-            background: "#fef2f2",
-            border: "1px solid #fecaca",
-            borderRadius: 8,
-            color: "#991b1b",
-            fontSize: 13,
-          }}>
-            {error}
-          </div>
-        )}
-
-        {info && (
-          <div style={{
-            padding: "10px 14px",
-            background: "#f0fdf4",
-            border: "1px solid #bbf7d0",
-            borderRadius: 8,
-            color: "#166534",
-            fontSize: 13,
-          }}>
-            {info}
-          </div>
-        )}
-
-        <button onClick={onSubmit} disabled={loading} style={{ marginTop: 8 }}>
-          {loading ? "Saving..." : "Complete profile"}
-        </button>
 
       </div>
     </div>
