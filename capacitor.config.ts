@@ -36,6 +36,7 @@ const config: CapacitorConfig = {
   },
   ios: {
     scheme: 'Time Bridge',
+    contentInset: 'automatic',
   },
   android: {
     allowMixedContent: false,

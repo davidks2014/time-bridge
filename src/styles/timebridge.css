@@ -59,6 +59,10 @@ body {
   color: var(--text-body);
   line-height: 1.7;
   min-height: 100vh;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
 }
 
 /* ── Typography ── */
@@ -732,7 +736,12 @@ p  { color: var(--text-body); line-height: 1.75; font-size: 16px; }
 
 /* ── Safe area for notched phones ── */
 @supports (padding: max(0px)) {
-  .tb-nav { padding-left: max(24px, env(safe-area-inset-left)); padding-right: max(24px, env(safe-area-inset-right)); }
+  .tb-nav {
+    padding-left: max(24px, env(safe-area-inset-left));
+    padding-right: max(24px, env(safe-area-inset-right));
+    padding-top: env(safe-area-inset-top);
+    height: calc(var(--nav-height) + env(safe-area-inset-top));
+  }
   .tb-bottom-tabs { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 }
 
