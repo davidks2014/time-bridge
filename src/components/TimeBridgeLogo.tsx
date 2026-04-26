@@ -96,7 +96,7 @@ export default function TimeBridgeLogo({
 
         {/* Baby photo — left */}
         <div style={{
-          position: "absolute", top: Math.round(4*s), left: Math.round(4*s), zIndex: 5,
+          position: "absolute", top: Math.round(30*s), left: Math.round(4*s), zIndex: 5,
           filter: `drop-shadow(0 ${2*s}px ${5*s}px rgba(0,0,0,0.13))`,
           transform: "rotate(-13deg)",
           ...animStyle("tb-logo-float-l"),
@@ -122,7 +122,7 @@ export default function TimeBridgeLogo({
 
         {/* Couple photo — centre */}
         <div style={{
-          position: "absolute", top: 0, left: "50%",
+          position: "absolute", top: Math.round(26*s), left: "50%",
           transform: "translateX(-50%) rotate(1deg)", zIndex: 5,
           filter: `drop-shadow(0 ${2*s}px ${5*s}px rgba(0,0,0,0.15))`,
           ...animStyle("tb-logo-float-c", "5s", "0.4s"),
@@ -147,7 +147,7 @@ export default function TimeBridgeLogo({
 
         {/* Elder photo — right */}
         <div style={{
-          position: "absolute", top: Math.round(4*s), right: Math.round(4*s), zIndex: 5,
+          position: "absolute", top: Math.round(30*s), right: Math.round(4*s), zIndex: 5,
           filter: `drop-shadow(0 ${2*s}px ${5*s}px rgba(0,0,0,0.13))`,
           transform: "rotate(12deg)",
           ...animStyle("tb-logo-float-r", "5s", "0.8s"),
