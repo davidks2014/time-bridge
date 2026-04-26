@@ -67,7 +67,13 @@ export const authOptions: NextAuthOptions = {
   ],
 
   callbacks: {
-    async signIn({ user, account }) {
+    async signIn({ user, account, profile }) {
+      console.log("[auth] signIn callback:", {
+        provider: account?.provider,
+        email: user?.email,
+        profile,
+      });
+
       // Allow credentials login to pass through to the existing logic
       if (account?.provider === "credentials") {
         return true;
@@ -85,28 +91,22 @@ export const authOptions: NextAuthOptions = {
             select: { id: true, verificationStatus: true },
           });
 
+          console.log("[auth] DB user found:", existing?.id ?? "NOT FOUND");
+
           if (existing) {
             // Existing user — allow sign in
-            // They have already been verified previously
             return true;
           }
 
           // New Google user — create a basic account
-          // Profile is incomplete — they will be guided to complete it
-          // We set APPROVED here so they can access the dashboard immediately
-          // Their profile completion (NRIC, documents) is handled separately
           await prisma.user.create({
             data: {
               email,
               name: user.name ?? email.split("@")[0],
-              // Google users do not have a password
               passwordHash: "",
-              // Empty — completed at /complete-profile page
               phoneNumber: "",
               identificationNo: "",
               address: "",
-              // Allow dashboard access immediately
-              // Profile completion is nudged via the dashboard banner
               verificationStatus: "APPROVED",
             },
           });
@@ -121,7 +121,7 @@ export const authOptions: NextAuthOptions = {
       return false;
     },
 
-    async session({ session, token }) {
+    async session({ session, token: _token }) {
       // Add user role and verification status to the session
       // so the frontend can use it for routing decisions
       if (session.user?.email) {
@@ -175,7 +175,6 @@ export const authOptions: NextAuthOptions = {
             identificationNo: true,
             phoneNumber: true,
             address: true,
-            proofOfLifeStage: true,
           },
         });
 
@@ -187,8 +186,6 @@ export const authOptions: NextAuthOptions = {
             dbUser.phoneNumber &&
             dbUser.address
           );
-          // Store proof of life stage in token for fingerprint check
-          token.proofOfLifeStage = dbUser.proofOfLifeStage;
           token.userId = dbUser.id;
           token.userName = dbUser.name;
         }
