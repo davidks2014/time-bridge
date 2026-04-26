@@ -16,13 +16,35 @@ function LoginForm() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
 
-  function handleGoogleLogin() {
+  async function handleGoogleLogin() {
     const isMobile = Capacitor.isNativePlatform();
-    signIn("google", {
-      callbackUrl: isMobile
-        ? "https://timebridge.sg/api/auth/mobile-callback"
-        : "/dashboard",
-    });
+
+    if (isMobile) {
+      setLoading(true);
+      setError("");
+      try {
+        const { nativeGoogleSignIn } = await import("@/lib/nativeGoogleAuth");
+        const googleUser = await nativeGoogleSignIn();
+        if (!googleUser?.email) throw new Error("No email returned");
+        const res = await fetch("/api/auth/native-google", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: googleUser.email,
+            name: googleUser.name,
+          }),
+        });
+        if (!res.ok) throw new Error("Sign in failed");
+        router.push("/dashboard");
+      } catch (err: any) {
+        setError(err?.message ?? "Google sign in failed. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    signIn("google", { callbackUrl: "/dashboard" });
   }
 
   async function login() {
