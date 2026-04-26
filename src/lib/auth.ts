@@ -67,38 +67,25 @@ export const authOptions: NextAuthOptions = {
   ],
 
   callbacks: {
-    async signIn({ user, account, profile }) {
-      console.log("[auth] signIn callback:", {
-        provider: account?.provider,
-        email: user?.email,
-        profile,
-      });
-
-      // Allow credentials login to pass through to the existing logic
+    async signIn({ user, account }) {
       if (account?.provider === "credentials") {
         return true;
       }
 
-      // Handle Google login
       if (account?.provider === "google") {
         try {
           const email = user.email?.toLowerCase().trim();
           if (!email) return false;
 
-          // Check if user already exists in database
           const existing = await prisma.user.findUnique({
             where: { email },
             select: { id: true, verificationStatus: true },
           });
 
-          console.log("[auth] DB user found:", existing?.id ?? "NOT FOUND");
-
           if (existing) {
-            // Existing user — allow sign in
             return true;
           }
 
-          // New Google user — create a basic account
           await prisma.user.create({
             data: {
               email,
@@ -153,6 +140,13 @@ export const authOptions: NextAuthOptions = {
       }
 
       return session;
+    },
+
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith('/')) return `${baseUrl}${url}`;
+      if (url.startsWith(baseUrl)) return url;
+      if (url.includes('timebridge.sg')) return url;
+      return `${baseUrl}/dashboard`;
     },
 
     async jwt({ token, user }) {

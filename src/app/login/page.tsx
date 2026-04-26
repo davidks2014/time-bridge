@@ -21,7 +21,7 @@ function LoginForm() {
     signIn("google", {
       callbackUrl: isMobile
         ? "https://timebridge.sg/api/auth/mobile-callback"
-        : callbackUrl,
+        : "/dashboard",
     });
   }
 
