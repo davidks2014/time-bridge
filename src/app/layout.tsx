@@ -1,8 +1,25 @@
 import type { Metadata, Viewport } from "next";
+import { Cormorant_Garamond, Lato } from "next/font/google";
 import Providers from "./providers";
 import Navbar from "@/components/Navbar";
 import CapacitorBridge from "@/components/CapacitorBridge";
+import "./globals.css";
 import "@/styles/timebridge.css";
+
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600"],
+  style: ["normal", "italic"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const lato = Lato({
+  subsets: ["latin"],
+  weight: ["300", "400", "700"],
+  variable: "--font-body",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Time Bridge — My love stays, always",
@@ -37,16 +54,13 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 5,
   themeColor: "#FAF7F2",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-      </head>
-      <body>
+      <body className={`${cormorant.variable} ${lato.variable}`}>
         <Providers>
           <CapacitorBridge />
           <Navbar />
