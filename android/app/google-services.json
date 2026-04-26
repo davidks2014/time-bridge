@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "988942190998",
+    "project_id": "time-bridge-493723",
+    "storage_bucket": "time-bridge-493723.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:988942190998:android:dba4629d7e2fb212d7f5b7",
+        "android_client_info": {
+          "package_name": "sg.timebridge.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "988942190998-9siaq5bkbbs7tl2omjvsmvuu8cpfcfc3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD0GJ3eFiy5EtDmZ-vP1H8I1k5hP0elBp0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "988942190998-9siaq5bkbbs7tl2omjvsmvuu8cpfcfc3.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
