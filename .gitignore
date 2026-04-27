@@ -37,3 +37,7 @@ next-env.d.ts
 # local uploads (very important)
 /uploads
 /public/uploads
+
+# Android release keystore — NEVER commit
+android/app/timebridge-release.jks
+android/app/*.jks
