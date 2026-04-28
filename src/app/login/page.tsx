@@ -222,6 +222,12 @@ function LoginForm() {
               Claim it here
             </a>
           </p>
+          <p style={{ fontSize: 11, color: "var(--earth-muted)", marginTop: 16, lineHeight: 1.6 }}>
+            By continuing, you agree to our{" "}
+            <a href="/terms" style={{ color: "var(--earth-muted)", textDecoration: "underline" }}>Terms of Service</a>
+            {" "}and{" "}
+            <a href="/privacy" style={{ color: "var(--earth-muted)", textDecoration: "underline" }}>Privacy Policy</a>
+          </p>
         </div>
 
       </div>

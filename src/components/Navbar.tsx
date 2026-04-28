@@ -56,7 +56,7 @@ export default function Navbar() {
   const isAdmin = role === "ADMIN";
 
   // Hide navbar on auth pages
-  const hideOn = ["/login", "/register", "/complete-profile", "/pending-verification", "/claim", "/receiver"];
+  const hideOn = ["/login", "/register", "/complete-profile", "/pending-verification", "/claim", "/receiver", "/privacy", "/terms", "/data-deletion", "/contact"];
   if (hideOn.some((p) => pathname?.startsWith(p))) return null;
   if (status === "loading" || !session) return null;
 

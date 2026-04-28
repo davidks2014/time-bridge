@@ -14,6 +14,7 @@ export default function RegisterPage() {
   const [confirm, setConfirm]   = useState("");
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
+  const [agreed, setAgreed]     = useState(false);
 
   async function register() {
     setError("");
@@ -22,6 +23,7 @@ export default function RegisterPage() {
     if (!email.trim())    return setError("Email address is required.");
     if (password.length < 8) return setError("Password must be at least 8 characters.");
     if (password !== confirm)  return setError("Passwords do not match.");
+    if (!agreed) return setError("Please agree to the Terms of Service and Privacy Policy to continue.");
 
     setLoading(true);
     try {
@@ -178,10 +180,36 @@ export default function RegisterPage() {
             Your personal details (NRIC, address) will be collected on the next step for identity verification. Time Bridge complies with PDPA.
           </div>
 
+          {/* Terms & Privacy consent */}
+          <label style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+            marginBottom: 16,
+            cursor: "pointer",
+          }}>
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              style={{ marginTop: 3, flexShrink: 0, accentColor: "var(--gold)", width: 16, height: 16, cursor: "pointer" }}
+            />
+            <span style={{ fontSize: 12, color: "var(--earth-muted)", lineHeight: 1.6, fontFamily: "var(--font-body)" }}>
+              I agree to the{" "}
+              <a href="/terms" target="_blank" rel="noopener noreferrer" style={{ color: "var(--gold)", textDecoration: "underline" }}>
+                Terms of Service
+              </a>
+              {" "}and{" "}
+              <a href="/privacy" target="_blank" rel="noopener noreferrer" style={{ color: "var(--gold)", textDecoration: "underline" }}>
+                Privacy Policy
+              </a>
+            </span>
+          </label>
+
           <button
             className="tb-btn tb-btn-primary tb-btn-full"
             onClick={register}
-            disabled={loading}
+            disabled={loading || !agreed}
             style={{ fontSize: 13, letterSpacing: "1.5px" }}
           >
             {loading ? "Creating account..." : "Create account"}
