@@ -97,8 +97,8 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* Desktop links */}
-        <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+        {/* Desktop links — hidden on mobile via .tb-nav-actions CSS */}
+        <div className="tb-nav-actions" style={{ gap: 2 }}>
           {links.map((link) => (
             <button
               key={link.href}
