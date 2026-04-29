@@ -12,7 +12,7 @@ import { parseSingaporeDateTimeInput } from "@/lib/sg-time";
 export const dynamic = "force-dynamic";
 
 const MAX_IMAGE_BYTES = BigInt(10 * 1024 * 1024); // 10MB
-const MAX_VIDEO_BYTES = BigInt(100 * 1024 * 1024); // 100MB
+const MAX_VIDEO_BYTES = BigInt(200 * 1024 * 1024); // 200MB
 
 function normalizeIdentificationNo(raw: string): string {
   return String(raw ?? "")
@@ -251,7 +251,7 @@ export async function POST(req: Request) {
 
       if (msg === "VIDEO_TOO_LARGE") {
         return Response.json(
-          { error: "Video exceeds maximum allowed size of 100MB." },
+          { error: "Video exceeds maximum allowed size of 200MB." },
           { status: 400 }
         );
       }

@@ -125,8 +125,11 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
       setError("Only JPG, PNG, WebP images and MP4/MOV videos are allowed.");
       return;
     }
-    if (file.size > 50 * 1024 * 1024) {
-      setError("File too large. Maximum 50MB.");
+    const isVideo = file.type.startsWith("video/");
+    const maxBytes = isVideo ? 200 * 1024 * 1024 : 10 * 1024 * 1024;
+    const maxLabel = isVideo ? "200MB" : "10MB";
+    if (file.size > maxBytes) {
+      setError(`File too large. Maximum ${maxLabel}.`);
       return;
     }
 
@@ -393,7 +396,7 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
                     onChange={handleFileUpload}
                   />
                   <span style={{ fontSize: 11, color: "var(--earth-muted)" }}>
-                    JPG, PNG, WebP images or MP4/MOV videos up to 50MB
+                    JPG/PNG/WebP images up to 10MB · MP4/MOV videos up to 200MB
                   </span>
                 </div>
               </div>

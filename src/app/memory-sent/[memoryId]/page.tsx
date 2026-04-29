@@ -11,7 +11,7 @@ import {
 
 const MAX_EDIT_ATTACHMENTS_PER_ADD = 5;
 const MAX_IMAGE_MB = 10;
-const MAX_VIDEO_MB = 100;
+const MAX_VIDEO_MB = 200;
 
 type MemoryItemStatus = "DRAFT" | "RELEASED";
 type AttachmentType = "IMAGE" | "VIDEO";
