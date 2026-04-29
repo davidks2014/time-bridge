@@ -63,28 +63,57 @@ export default function CompleteProfilePage() {
     setStep((s) => s + 1);
   }
 
+  async function uploadDocumentToB2(file: File): Promise<string> {
+    const signRes = await fetch("/api/media/sign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemType: "DOCUMENT", fileName: file.name, contentType: file.type }),
+    });
+    if (!signRes.ok) throw new Error("Failed to get upload URL.");
+    const { uploadUrl, cdnUrl } = await signRes.json();
+
+    const uploadRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+    if (!uploadRes.ok) throw new Error("Failed to upload document to storage.");
+
+    return cdnUrl as string;
+  }
+
   async function submit() {
     setError("");
     if (!validateStep3()) return;
+    if (!idFront) { setError("Please upload your NRIC front image."); return; }
 
     setLoading(true);
     try {
-      const form = new FormData();
-      form.append("identificationNo", idNo.trim().toUpperCase());
-      form.append("phoneNumber",      phone.trim());
-      form.append("address",          address.trim());
-      form.append("consentAgreed",    "true");
-      if (idFront) form.append("idFront", idFront);
-      if (idBack)  form.append("idBack",  idBack);
+      const verificationDocFrontUrl = await uploadDocumentToB2(idFront);
+      const verificationDocBackUrl  = idBack ? await uploadDocumentToB2(idBack) : null;
 
-      const res  = await fetch("/api/auth/complete-profile", { method: "POST", body: form });
+      const res  = await fetch("/api/auth/complete-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identificationNo:       idNo.trim().toUpperCase(),
+          phoneNumber:            phone.trim(),
+          address:                address.trim(),
+          verificationDocFrontUrl,
+          verificationDocBackUrl,
+          consentDataCollection:  consents.dataStorage,
+          consentLegacyDelivery:  consents.legacy,
+          consentReceiverContact: consents.identity,
+          consentTerms:           consents.terms,
+        }),
+      });
       const json = await res.json();
 
       if (!res.ok) { setError(json?.error ?? "Submission failed. Please try again."); return; }
 
       router.push("/dashboard");
-    } catch {
-      setError("Network error. Please try again.");
+    } catch (err: any) {
+      setError(err?.message ?? "Network error. Please try again.");
     } finally {
       setLoading(false);
     }

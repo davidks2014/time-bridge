@@ -3,8 +3,8 @@
  *
  * Purpose:
  * - Called by Google users after first login
- * - Updates their profile with NRIC, phone, address
- * - Uploads verification documents to B2 storage
+ * - Accepts pre-uploaded B2 CDN URLs for verification documents
+ * - Updates profile with NRIC, phone, address
  * - Saves consent records for PDPA compliance
  * - Sets verificationStatus to PENDING for admin review
  */
@@ -12,14 +12,12 @@
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { uploadToB2 } from "@/lib/b2Storage";
-import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    // 1) Must be logged in via Google
+    // 1) Must be logged in
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return Response.json({ error: "Not logged in." }, { status: 401 });
@@ -37,18 +35,21 @@ export async function POST(req: Request) {
       return Response.json({ error: "User not found." }, { status: 404 });
     }
 
-    // 3) Read form data
-    const form = await req.formData();
-    const phoneNumber = String(form.get("phoneNumber") ?? "").trim();
-    const identificationNo = String(form.get("identificationNo") ?? "").trim();
-    const address = String(form.get("address") ?? "").trim();
-    const idFront = form.get("idFront");
+    // 3) Read JSON body — files are pre-uploaded to B2 by the browser
+    const body = await req.json().catch(() => ({}));
 
-    // Read consent flags
-    const consentDataCollection = form.get("consentDataCollection") === "true";
-    const consentLegacyDelivery = form.get("consentLegacyDelivery") === "true";
-    const consentReceiverContact = form.get("consentReceiverContact") === "true";
-    const consentTerms = form.get("consentTerms") === "true";
+    const phoneNumber      = String(body.phoneNumber      ?? "").trim();
+    const identificationNo = String(body.identificationNo ?? "").trim();
+    const address          = String(body.address          ?? "").trim();
+    const verificationDocFrontUrl = String(body.verificationDocFrontUrl ?? "").trim();
+    const verificationDocBackUrl  = body.verificationDocBackUrl
+      ? String(body.verificationDocBackUrl).trim()
+      : null;
+
+    const consentDataCollection  = body.consentDataCollection  === true;
+    const consentLegacyDelivery  = body.consentLegacyDelivery  === true;
+    const consentReceiverContact = body.consentReceiverContact === true;
+    const consentTerms           = body.consentTerms           === true;
 
     // 4) Validate required fields
     if (!phoneNumber || !identificationNo || !address) {
@@ -58,7 +59,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!(idFront instanceof File)) {
+    if (!verificationDocFrontUrl) {
       return Response.json(
         { error: "Verification image (front) is required." },
         { status: 400 }
@@ -72,32 +73,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5) Upload verification document to B2
-    async function uploadDocument(file: File, side: string): Promise<string> {
-      const allowed = ["image/jpeg", "image/png", "image/webp"];
-      if (!allowed.includes(file.type)) {
-        throw new Error("Only JPG/PNG/WebP images are allowed.");
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        throw new Error("File too large. Max 5MB.");
-      }
-
-      const bytes = Buffer.from(await file.arrayBuffer());
-      const safeName = crypto.randomBytes(8).toString("hex");
-      const fileName = `${identificationNo}_${side}_${Date.now()}_${safeName}`;
-
-      return uploadToB2(bytes, fileName, file.type, "documents");
-    }
-
-    const verificationDocFrontUrl = await uploadDocument(idFront, "front");
-
-    const idBack = form.get("idBack");
-    let verificationDocBackUrl: string | null = null;
-    if (idBack instanceof File && idBack.size > 0) {
-      verificationDocBackUrl = await uploadDocument(idBack, "back");
-    }
-
-    // 6) Update user profile
+    // 5) Update user profile
     await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -111,8 +87,6 @@ export async function POST(req: Request) {
     });
 
     // Auto-match NRIC against released memories
-    // If a match is found, a verification request is created automatically
-    // so admin can link the receiver to this user account
     const { autoMatchNric } = await import("@/lib/nric-match");
     const matchResult = await autoMatchNric(user.id, identificationNo);
 
@@ -122,14 +96,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // 7) Save consent records for PDPA compliance
+    // 6) Save consent records for PDPA compliance
     const ipAddress = req.headers.get("x-forwarded-for") ?? "unknown";
 
     await prisma.consentRecord.createMany({
       data: [
-        { userId: user.id, consentType: "DATA_COLLECTION", ipAddress },
-        { userId: user.id, consentType: "LEGACY_DELIVERY", ipAddress },
-        { userId: user.id, consentType: "RECEIVER_CONTACT", ipAddress },
+        { userId: user.id, consentType: "DATA_COLLECTION",   ipAddress },
+        { userId: user.id, consentType: "LEGACY_DELIVERY",   ipAddress },
+        { userId: user.id, consentType: "RECEIVER_CONTACT",  ipAddress },
         { userId: user.id, consentType: "TERMS_AND_PRIVACY", ipAddress },
       ],
     });
@@ -140,10 +114,6 @@ export async function POST(req: Request) {
 
   } catch (err: any) {
     console.error("complete-profile error:", err);
-    const msg = String(err?.message ?? "");
-    if (msg.includes("Only JPG") || msg.includes("Max 5MB") || msg.includes("upload")) {
-      return Response.json({ error: msg }, { status: 400 });
-    }
     return Response.json({ error: "Server error." }, { status: 500 });
   }
 }

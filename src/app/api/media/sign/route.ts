@@ -6,7 +6,7 @@ import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 
-type AllowedItemType = "IMAGE" | "VIDEO";
+type AllowedItemType = "IMAGE" | "VIDEO" | "DOCUMENT";
 
 function normalizeEmail(raw: string): string {
   return String(raw ?? "").trim().toLowerCase();
@@ -14,14 +14,14 @@ function normalizeEmail(raw: string): string {
 
 function normalizeItemType(raw: unknown): AllowedItemType {
   const value = String(raw ?? "").trim().toUpperCase();
-  if (value === "IMAGE" || value === "VIDEO") return value as AllowedItemType;
+  if (value === "IMAGE" || value === "VIDEO" || value === "DOCUMENT") return value as AllowedItemType;
   throw new Error("INVALID_ITEM_TYPE");
 }
 
 function getFolderByItemType(itemType: AllowedItemType): string {
-  return itemType === "VIDEO"
-    ? "memories/videos"
-    : "memories/images";
+  if (itemType === "VIDEO") return "memories/videos";
+  if (itemType === "DOCUMENT") return "documents";
+  return "memories/images";
 }
 
 /**
