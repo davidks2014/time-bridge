@@ -79,7 +79,6 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      if (role === "ADMIN") { router.replace("/admin"); return; }
       fetch("/api/auth/record-device", { method: "POST" }).catch(() => {});
       loadDashboard();
     }
