@@ -88,6 +88,43 @@ export default function PendingVerificationPage() {
     }
   }
 
+  async function compressImage(file: File): Promise<File> {
+    return new Promise((resolve) => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d")!;
+      const img = new Image();
+      img.onload = () => {
+        const maxWidth = 1200;
+        const scale = Math.min(1, maxWidth / img.width);
+        canvas.width  = img.width  * scale;
+        canvas.height = img.height * scale;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          resolve(blob ? new File([blob], file.name, { type: "image/jpeg" }) : file);
+        }, "image/jpeg", 0.8);
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  async function uploadDocumentToB2(file: File): Promise<string> {
+    const compressed = await compressImage(file);
+    const signRes = await fetch("/api/media/sign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemType: "DOCUMENT", fileName: compressed.name, contentType: compressed.type }),
+    });
+    if (!signRes.ok) throw new Error("Failed to get upload URL.");
+    const { uploadUrl, cdnUrl } = await signRes.json();
+    const uploadRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": compressed.type },
+      body: compressed,
+    });
+    if (!uploadRes.ok) throw new Error("Failed to upload document to storage.");
+    return cdnUrl as string;
+  }
+
   async function resubmitVerification() {
     setError("");
     setInfo("");
@@ -100,13 +137,13 @@ export default function PendingVerificationPage() {
     setResubmitting(true);
 
     try {
-      const form = new FormData();
-      form.append("idFront", idFront);
-      if (idBack) form.append("idBack", idBack);
+      const frontUrl = await uploadDocumentToB2(idFront);
+      const backUrl  = idBack ? await uploadDocumentToB2(idBack) : null;
 
       const res = await fetch("/api/auth/resubmit-verification", {
         method: "POST",
-        body: form,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ frontUrl, backUrl }),
       });
 
       const json = await res.json();
@@ -121,11 +158,9 @@ export default function PendingVerificationPage() {
       setIdFront(null);
       setIdBack(null);
       setError("");
-      setInfo(
-        "Verification documents resubmitted successfully. Please wait for admin approval."
-      );
-    } catch {
-      setError("Network error.");
+      setInfo("Verification documents resubmitted successfully. Please wait for admin approval.");
+    } catch (err: any) {
+      setError(err?.message ?? "Network error.");
     } finally {
       setResubmitting(false);
     }

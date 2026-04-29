@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { uploadToB2 } from "@/lib/b2Storage";
 
 export async function POST(req: Request) {
   try {
@@ -23,44 +22,18 @@ export async function POST(req: Request) {
         { status: 400 }
       );
 
-    const form = await req.formData();
-    const idFront = form.get("idFront");
-    const idBack = form.get("idBack");
+    const body = await req.json().catch(() => ({}));
+    const frontUrl = String(body.frontUrl ?? "").trim();
+    const backUrl  = body.backUrl ? String(body.backUrl).trim() : null;
 
-    if (!(idFront instanceof File))
-      return Response.json(
-        { error: "Front image is required." },
-        { status: 400 }
-      );
-
-    const allowed = ["image/jpeg", "image/png", "image/webp"];
-    if (!allowed.includes(idFront.type))
-      return Response.json(
-        { error: "Only JPG/PNG/WebP allowed." },
-        { status: 400 }
-      );
-
-    if (idFront.size > 5 * 1024 * 1024)
-      return Response.json({ error: "Max 5MB." }, { status: 400 });
-
-    const frontBuf = Buffer.from(await idFront.arrayBuffer());
-    const verificationDocFrontUrl = await uploadToB2(
-      frontBuf, idFront.name, idFront.type, "documents"
-    );
-
-    let verificationDocBackUrl: string | null = null;
-    if (idBack instanceof File && idBack.size > 0) {
-      const backBuf = Buffer.from(await idBack.arrayBuffer());
-      verificationDocBackUrl = await uploadToB2(
-        backBuf, idBack.name, idBack.type, "documents"
-      );
-    }
+    if (!frontUrl)
+      return Response.json({ error: "Front image URL is required." }, { status: 400 });
 
     await prisma.user.update({
       where: { id: user.id },
       data: {
-        verificationDocFrontUrl,
-        verificationDocBackUrl,
+        verificationDocFrontUrl: frontUrl,
+        verificationDocBackUrl: backUrl,
         verificationStatus: "PENDING",
         rejectReason: null,
         verifiedAt: null,
