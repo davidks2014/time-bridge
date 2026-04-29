@@ -23,10 +23,15 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+// Explicit fallback ensures presigned URLs never point to amazonaws.com
+const R2_ENDPOINT =
+  process.env.R2_ENDPOINT ??
+  "https://e0e1957c4f7b76e22375a904ca0cc1bd.r2.cloudflarestorage.com";
+
 // R2 S3-compatible client — region must be 'auto' for Cloudflare R2
 // forcePathStyle generates /{bucket}/{key} presigned URLs matching R2's endpoint format
 const s3 = new S3Client({
-  endpoint: process.env.R2_ENDPOINT!,
+  endpoint: R2_ENDPOINT,
   region: "auto",
   forcePathStyle: true,
   credentials: {
@@ -72,7 +77,7 @@ export async function uploadToB2(
  * @param key         - Full R2 object key (including folder prefix)
  * @param contentType - MIME type to enforce on the upload
  * @param expiresIn   - URL validity in seconds (default: 1 hour)
- * @returns Presigned upload URL string
+ * @returns Presigned upload URL string pointing to the R2 endpoint
  */
 export async function generatePresignedUploadUrl(
   key: string,
@@ -84,7 +89,11 @@ export async function generatePresignedUploadUrl(
     Key: key,
     ContentType: contentType,
   });
-  return getSignedUrl(s3, command, { expiresIn });
+  const signedUrl = await getSignedUrl(s3, command, { expiresIn });
+
+  // AWS SDK with region 'auto' can fall back to s3.auto.amazonaws.com.
+  // Force the correct R2 endpoint in the presigned URL.
+  return signedUrl.replace(/https:\/\/[^/]*amazonaws\.com/, R2_ENDPOINT);
 }
 
 /**
