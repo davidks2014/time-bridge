@@ -18,12 +18,12 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    const form = await req.formData();
+    const body = await req.json().catch(() => ({}));
 
     // Read basic registration fields
-    const name = String(form.get("name") ?? "").trim();
-    const email = String(form.get("email") ?? "").toLowerCase().trim();
-    const password = String(form.get("password") ?? "");
+    const name     = String(body.name     ?? "").trim();
+    const email    = String(body.email    ?? "").toLowerCase().trim();
+    const password = String(body.password ?? "");
 
     // Validate required fields
     if (!name || !email || !password) {
