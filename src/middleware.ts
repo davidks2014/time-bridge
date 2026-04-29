@@ -59,11 +59,6 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Admin on dashboard → send to admin panel ─────────────────────────────
-  if (role === "ADMIN" && pathname === "/dashboard") {
-    return NextResponse.redirect(new URL("/admin", req.url));
-  }
-
   // ── All other logged-in users → allow ────────────────────────────────────
   return NextResponse.next();
 }
