@@ -33,6 +33,7 @@ export async function GET() {
         verificationStatus: true,
         verifiedAt: true,
         rejectReason: true,
+        verificationDocFrontUrl: true,
         identificationNo: true,
         phoneNumber: true,
         address: true,

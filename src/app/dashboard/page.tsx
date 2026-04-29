@@ -85,7 +85,11 @@ export default function DashboardPage() {
       const json = await res.json();
       if (!res.ok) return;
       if (json.user?.verificationStatus !== "APPROVED") {
-        router.push("/pending-verification");
+        if (json.user?.verificationDocFrontUrl) {
+          router.push("/pending-verification");
+        } else {
+          router.push("/complete-profile");
+        }
       }
     } catch {}
   }, [role, router]);
