@@ -28,7 +28,7 @@ type MeResponse = {
 
 export default function PendingVerificationPage() {
   const router = useRouter();
-  const { status, data: session } = useSession();
+  const { status, data: session, update } = useSession();
 
   const [loading, setLoading] = useState(false);
   const [info, setInfo] = useState("");
@@ -159,6 +159,7 @@ export default function PendingVerificationPage() {
       setIdBack(null);
       setError("");
       setInfo("Verification documents resubmitted successfully. Please wait for admin approval.");
+      await update();
       router.push("/dashboard");
     } catch (err: any) {
       setError(err?.message ?? "Network error.");
