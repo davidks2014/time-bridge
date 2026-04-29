@@ -159,6 +159,7 @@ export default function PendingVerificationPage() {
       setIdBack(null);
       setError("");
       setInfo("Verification documents resubmitted successfully. Please wait for admin approval.");
+      router.push("/dashboard");
     } catch (err: any) {
       setError(err?.message ?? "Network error.");
     } finally {
