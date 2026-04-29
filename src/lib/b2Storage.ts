@@ -91,9 +91,17 @@ export async function generatePresignedUploadUrl(
   });
   const signedUrl = await getSignedUrl(s3, command, { expiresIn });
 
-  // AWS SDK with region 'auto' can fall back to s3.auto.amazonaws.com.
-  // Force the correct R2 endpoint in the presigned URL.
-  return signedUrl.replace(/https:\/\/[^/]*amazonaws\.com/, R2_ENDPOINT);
+  // Correct any amazonaws.com fallback to the real R2 endpoint
+  const correctedUrl = signedUrl.replace(/https:\/\/[^/]*amazonaws\.com/, R2_ENDPOINT);
+
+  // Rewrite host to cdn.timebridge.sg — hits Singapore Cloudflare edge directly
+  // CDN domain maps to root of bucket, so strip the /timebridge-memories prefix
+  const url = new URL(correctedUrl);
+  url.hostname = "cdn.timebridge.sg";
+  url.protocol = "https:";
+  url.pathname = url.pathname.replace(/^\/timebridge-memories/, "");
+
+  return url.toString();
 }
 
 /**
