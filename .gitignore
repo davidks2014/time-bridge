@@ -41,3 +41,7 @@ next-env.d.ts
 # Android release keystore — NEVER commit
 android/app/timebridge-release.jks
 android/app/*.jks
+
+# iOS build artifacts
+ios/App/CapApp-SPM/build/
+ios/App/CapApp-SPM/.build/
