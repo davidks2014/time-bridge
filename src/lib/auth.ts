@@ -109,8 +109,6 @@ export const authOptions: NextAuthOptions = {
     },
 
     async session({ session, token: _token }) {
-      // Add user role and verification status to the session
-      // so the frontend can use it for routing decisions
       if (session.user?.email) {
         const user = await prisma.user.findUnique({
           where: { email: session.user.email.toLowerCase() },
@@ -118,8 +116,8 @@ export const authOptions: NextAuthOptions = {
             id: true,
             role: true,
             verificationStatus: true,
+            proofOfLifeStage: true,
             name: true,
-            // Check if profile is complete — Google users may not have filled this yet
             identificationNo: true,
             phoneNumber: true,
             address: true,
@@ -130,7 +128,7 @@ export const authOptions: NextAuthOptions = {
           (session.user as any).id = user.id;
           (session.user as any).role = user.role;
           (session.user as any).verificationStatus = user.verificationStatus;
-          // Flag incomplete profile so frontend can redirect to profile setup
+          (session.user as any).proofOfLifeStage = user.proofOfLifeStage;
           (session.user as any).profileComplete = !!(
             user.identificationNo &&
             user.phoneNumber &&
@@ -149,15 +147,9 @@ export const authOptions: NextAuthOptions = {
       return `${baseUrl}/dashboard`;
     },
 
-    async jwt({ token, user }) {
-      // On initial sign in, attach basic user details to the token
-      if (user) {
-        token.email = user.email;
-        token.role = (user as any).role;
-        token.verificationStatus = (user as any).verificationStatus;
-      }
-
-      // Always fetch fresh profile data from database
+    async jwt({ token, user: _user, trigger: _trigger }) {
+      // Always re-fetch from DB so verificationStatus, role, and proofOfLifeStage
+      // are never stale — admin changes are visible on the next session access
       if (token.email) {
         const dbUser = await prisma.user.findUnique({
           where: { email: String(token.email).toLowerCase() },
@@ -166,6 +158,7 @@ export const authOptions: NextAuthOptions = {
             name: true,
             role: true,
             verificationStatus: true,
+            proofOfLifeStage: true,
             identificationNo: true,
             phoneNumber: true,
             address: true,
@@ -173,15 +166,16 @@ export const authOptions: NextAuthOptions = {
         });
 
         if (dbUser) {
+          token.userId = dbUser.id;
+          token.userName = dbUser.name;
           token.role = dbUser.role;
           token.verificationStatus = dbUser.verificationStatus;
+          token.proofOfLifeStage = dbUser.proofOfLifeStage;
           token.profileComplete = !!(
             dbUser.identificationNo &&
             dbUser.phoneNumber &&
             dbUser.address
           );
-          token.userId = dbUser.id;
-          token.userName = dbUser.name;
         }
       }
 
