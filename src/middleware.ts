@@ -56,33 +56,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── STEP 5: PENDING user ─────────────────────────────────────────────────
-  if (verificationStatus === "PENDING") {
-    const profileComplete = (token.profileComplete as boolean | undefined) ?? false;
-
-    if (!profileComplete) {
-      // Profile not yet submitted — must go to /complete-profile first
-      if (pathname === "/complete-profile") return NextResponse.next();
-      return NextResponse.redirect(new URL("/complete-profile", req.url));
-    }
-
-    // Profile submitted, awaiting admin review — allow dashboard and status pages
-    if (
-      pathname === "/dashboard" ||
-      pathname === "/pending-verification" ||
-      pathname === "/complete-profile"
-    ) {
-      return NextResponse.next();
-    }
+  // ── STEP 5: Non-APPROVED users — limited to key pages ───────────────────
+  if (verificationStatus !== "APPROVED") {
+    const allowed = ["/dashboard", "/complete-profile", "/pending-verification"];
+    if (allowed.includes(pathname)) return NextResponse.next();
     return NextResponse.redirect(new URL("/dashboard", req.url));
-  }
-
-  // ── STEP 6: REJECTED user — only pending-verification ────────────────────
-  if (verificationStatus === "REJECTED") {
-    if (pathname === "/pending-verification") {
-      return NextResponse.next();
-    }
-    return NextResponse.redirect(new URL("/pending-verification", req.url));
   }
 
   // ── STEP 7: APPROVED user — block admin and unverified-only pages ─────────
