@@ -92,6 +92,8 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
   const [itemContent, setItemContent]         = useState("");
   const [attachments, setAttachments]         = useState<Attachment[]>([]);
   const [uploading, setUploading]             = useState(false);
+  const [uploadProgress, setUploadProgress]   = useState<number | null>(null);
+  const [uploadFileName, setUploadFileName]   = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Step 2 — Receivers
@@ -116,6 +118,41 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
   }
 
   // ── File upload ──
+
+  // Upload file to B2 via presigned PUT using XHR so we get progress events.
+  // fetch() does not expose upload progress for large files.
+  function putToB2WithProgress(
+    uploadUrl: string,
+    file: File,
+    onProgress: (percent: number) => void
+  ): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) {
+          onProgress(Math.round((event.loaded / event.total) * 100));
+        }
+      });
+
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress(100);
+          resolve();
+        } else {
+          reject(new Error(`B2 upload failed with status ${xhr.status}`));
+        }
+      });
+
+      xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
+      xhr.addEventListener("abort", () => reject(new Error("Upload aborted")));
+
+      xhr.open("PUT", uploadUrl);
+      xhr.setRequestHeader("Content-Type", file.type);
+      xhr.send(file);
+    });
+  }
+
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -134,39 +171,32 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
     }
 
     setUploading(true);
+    setUploadProgress(0);
+    setUploadFileName(file.name);
     setError("");
 
     try {
       const itemType: "IMAGE" | "VIDEO" = file.type.startsWith("video/") ? "VIDEO" : "IMAGE";
 
-      // Step 1: Get presigned B2 upload URL
+      // Step 1: Get presigned B2 upload URL from server
       const signRes = await fetch("/api/media/sign", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          itemType,
-          fileName: file.name,
-          contentType: file.type,
-        }),
+        body: JSON.stringify({ itemType, fileName: file.name, contentType: file.type }),
       });
       const signJson = await signRes.json();
       if (!signRes.ok) throw new Error(signJson?.error ?? "Failed to get upload URL");
 
-      // Step 2: PUT file directly to B2
-      const uploadRes = await fetch(signJson.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!uploadRes.ok) throw new Error("Upload to storage failed");
+      // Step 2: PUT file directly to B2 with XHR for progress tracking
+      await putToB2WithProgress(signJson.uploadUrl, file, setUploadProgress);
 
-      // Step 3: Report file size to server for storage tracking
+      // Step 3: Report file size to server for storage tracking (non-blocking)
       const sizeMB = file.size / (1024 * 1024);
       fetch("/api/media/confirm-upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sizeMB }),
-      }).catch(() => {}); // non-blocking — don't fail upload if tracking fails
+      }).catch(() => {});
 
       setAttachments((prev) => [...prev, {
         type: itemType,
@@ -179,6 +209,8 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
       setError("Upload failed. Please try again.");
     } finally {
       setUploading(false);
+      setUploadProgress(null);
+      setUploadFileName("");
       if (fileRef.current) fileRef.current.value = "";
     }
   }
@@ -374,6 +406,44 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
                     </div>
                   ))}
 
+                  {/* Upload progress bar — shown while a file is being uploaded */}
+                  {uploading && uploadProgress !== null && (
+                    <div style={{
+                      background: "var(--ivory)",
+                      border: "1px solid var(--border)",
+                      borderRadius: "var(--radius-sm)",
+                      padding: "12px 14px",
+                    }}>
+                      <div style={{
+                        fontSize: 12,
+                        color: "var(--earth-mid)",
+                        marginBottom: 8,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}>
+                        {uploadProgress < 100
+                          ? `Uploading ${uploadFileName}... ${uploadProgress}%`
+                          : `✓ Upload complete`}
+                      </div>
+                      <div style={{
+                        width: "100%",
+                        height: 6,
+                        background: "#EDE8DF",
+                        borderRadius: 99,
+                        overflow: "hidden",
+                      }}>
+                        <div style={{
+                          height: "100%",
+                          width: `${uploadProgress}%`,
+                          background: "#B8965A",
+                          borderRadius: 99,
+                          transition: "width 0.2s ease",
+                        }} />
+                      </div>
+                    </div>
+                  )}
+
                   <button
                     onClick={() => fileRef.current?.click()}
                     disabled={uploading}
@@ -382,7 +452,7 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
                       border: "1px dashed var(--border-dark)",
                       borderRadius: "var(--radius-sm)",
                       padding: "12px",
-                      cursor: "pointer",
+                      cursor: uploading ? "not-allowed" : "pointer",
                       color: "var(--earth-muted)",
                       fontSize: 13,
                       display: "flex",
@@ -390,11 +460,12 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
                       justifyContent: "center",
                       gap: 8,
                       transition: "all var(--transition)",
+                      opacity: uploading ? 0.5 : 1,
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.borderColor = "var(--gold-light)"}
+                    onMouseEnter={(e) => { if (!uploading) e.currentTarget.style.borderColor = "var(--gold-light)"; }}
                     onMouseLeave={(e) => e.currentTarget.style.borderColor = "var(--border-dark)"}
                   >
-                    {uploading ? "Uploading..." : "+ Add photo or video"}
+                    + Add photo or video
                   </button>
                   <input
                     ref={fileRef}
