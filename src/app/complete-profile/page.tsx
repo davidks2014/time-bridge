@@ -53,7 +53,7 @@ export default function CompleteProfilePage() {
   }
 
   function validateStep3() {
-    if (!allConsents) { setError("Please agree to all consent statements."); return false; }
+    if (!idFront) { setError("Please upload your NRIC front image."); return false; }
     return true;
   }
 
@@ -104,9 +104,10 @@ export default function CompleteProfilePage() {
   }
 
   async function submit() {
+    console.log("[complete-profile] submit called", { allConsents, idFront: !!idFront, loading });
     setError("");
-    if (!validateStep3()) return;
-    if (!idFront) { setError("Please upload your NRIC front image."); return; }
+    if (!allConsents) { setError("Please agree to all consent statements."); return; }
+    if (!idFront) { setError("Please upload your NRIC front image (go back to Step 2)."); return; }
 
     setLoading(true);
     try {
@@ -469,7 +470,7 @@ export default function CompleteProfilePage() {
               <button
                 className="tb-btn tb-btn-gold"
                 onClick={submit}
-                disabled={loading || !allConsents}
+                disabled={loading}
                 style={{ flex: 2, fontSize: 12, letterSpacing: "1px" }}
               >
                 {loading ? (submittingMessage || "Submitting...") : "Submit for verification"}
