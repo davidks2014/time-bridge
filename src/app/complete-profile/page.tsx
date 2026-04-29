@@ -7,7 +7,7 @@ import TimeBridgeLogo from "@/components/TimeBridgeLogo";
 import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 export default function CompleteProfilePage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const router = useRouter();
 
   const [step, setStep]         = useState(1);
@@ -136,6 +136,7 @@ export default function CompleteProfilePage() {
       if (!res.ok) { setError(json?.error ?? "Submission failed. Please try again."); return; }
 
       setSubmittingMessage("Almost done...");
+      await update(); // force JWT refresh so middleware sees updated verificationDocFrontUrl
       router.push("/pending-verification");
     } catch (err: any) {
       setError(err?.message ?? "Network error. Please try again.");
