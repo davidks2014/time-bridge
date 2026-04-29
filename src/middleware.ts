@@ -56,8 +56,17 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── STEP 5: PENDING user — only pending/complete-profile ─────────────────
+  // ── STEP 5: PENDING user ─────────────────────────────────────────────────
   if (verificationStatus === "PENDING") {
+    const profileComplete = (token.profileComplete as boolean | undefined) ?? false;
+
+    if (!profileComplete) {
+      // Profile not yet submitted — must go to /complete-profile first
+      if (pathname === "/complete-profile") return NextResponse.next();
+      return NextResponse.redirect(new URL("/complete-profile", req.url));
+    }
+
+    // Profile submitted, awaiting admin review
     if (pathname === "/pending-verification" || pathname === "/complete-profile") {
       return NextResponse.next();
     }

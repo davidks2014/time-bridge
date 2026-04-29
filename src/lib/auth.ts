@@ -143,9 +143,12 @@ export const authOptions: NextAuthOptions = {
     },
 
     async redirect({ url, baseUrl }) {
+      // Honor explicit in-app paths (e.g. callbackUrl=/complete-profile)
       if (url.startsWith('/')) return `${baseUrl}${url}`;
+      // Honor same-origin and production domain URLs
       if (url.startsWith(baseUrl)) return url;
       if (url.includes('timebridge.sg')) return url;
+      // Default — middleware will enforce correct routing per verification status
       return `${baseUrl}/dashboard`;
     },
 
