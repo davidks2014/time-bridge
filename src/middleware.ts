@@ -73,11 +73,18 @@ export async function middleware(req: NextRequest) {
   }
 
   // ── STEP 7: APPROVED user — block admin and unverified-only pages ─────────
-  if (
-    pathname.startsWith("/admin") ||
-    pathname === "/pending-verification" ||
-    pathname === "/complete-profile"
-  ) {
+  const profileComplete = (token.profileComplete as boolean | undefined) ?? false;
+
+  if (pathname.startsWith("/admin")) {
+    return NextResponse.redirect(new URL("/dashboard", req.url));
+  }
+
+  if (pathname === "/pending-verification") {
+    return NextResponse.redirect(new URL("/dashboard", req.url));
+  }
+
+  // Allow incomplete-profile users to reach /complete-profile
+  if (pathname === "/complete-profile" && profileComplete) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
