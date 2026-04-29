@@ -24,9 +24,11 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // R2 S3-compatible client — region must be 'auto' for Cloudflare R2
+// forcePathStyle generates /{bucket}/{key} presigned URLs matching R2's endpoint format
 const s3 = new S3Client({
   endpoint: process.env.R2_ENDPOINT!,
   region: "auto",
+  forcePathStyle: true,
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID!,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
