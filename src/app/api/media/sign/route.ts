@@ -69,6 +69,8 @@ export async function POST(req: Request) {
     const uploadUrl = await generatePresignedUploadUrl(key, contentType);
     const cdnUrl = getB2Url(key);
 
+    console.log("[media/sign] presigned URL host:", new URL(uploadUrl).hostname);
+
     return Response.json({
       uploadUrl,
       cdnUrl,

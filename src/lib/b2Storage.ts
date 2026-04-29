@@ -5,8 +5,11 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
+const B2_ENDPOINT =
+  process.env.B2_BUCKET_ENDPOINT ?? "https://s3.us-east-005.backblazeb2.com";
+
 const s3 = new S3Client({
-  endpoint: process.env.B2_BUCKET_ENDPOINT!,
+  endpoint: B2_ENDPOINT,
   region: "us-east-005",
   credentials: {
     accessKeyId: process.env.B2_KEY_ID!,
