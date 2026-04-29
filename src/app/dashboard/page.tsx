@@ -67,11 +67,12 @@ export default function DashboardPage() {
   const [confirming, setConfirming] = useState(false);
   const [confirmMsg, setConfirmMsg] = useState("");
 
-  const role       = (session?.user as any)?.role;
-  const proofStage = (session?.user as any)?.proofOfLifeStage ?? "NORMAL";
-  const verStatus  = (session?.user as any)?.verificationStatus;
+  const role         = (session?.user as any)?.role;
+  const proofStage   = (session?.user as any)?.proofOfLifeStage ?? "NORMAL";
+  const verStatus    = (session?.user as any)?.verificationStatus;
+  const rejectReason = (session?.user as any)?.rejectReason as string | null | undefined;
   const profileComplete = (session?.user as any)?.profileComplete;
-  const userName   = session?.user?.name ?? "Friend";
+  const userName     = session?.user?.name ?? "Friend";
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -164,8 +165,50 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* ── Profile incomplete banner ── */}
-        {!profileComplete && (
+        {/* ── Verification rejected banner ── */}
+        {verStatus === "REJECTED" && (
+          <div className="tb-banner tb-fade-in tb-stagger-1" style={{
+            marginBottom: 20,
+            background: "#FEF2F2",
+            border: "1px solid #FECACA",
+            borderRadius: "var(--radius-md)",
+            padding: "14px 18px",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 12,
+          }}>
+            <div className="tb-banner-dot" style={{ background: "#DC2626", marginTop: 4, flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <strong style={{ color: "#7F1D1D" }}>Verification rejected</strong>
+              {rejectReason && (
+                <div style={{ fontSize: 13, color: "#7F1D1D", marginTop: 4 }}>
+                  Reason: {rejectReason}
+                </div>
+              )}
+              <div style={{ marginTop: 8 }}>
+                <button
+                  onClick={() => router.push("/pending-verification")}
+                  style={{
+                    background: "#DC2626",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "var(--radius-sm)",
+                    padding: "6px 14px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  Resubmit documents
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Profile incomplete banner (not shown for rejected users) ── */}
+        {!profileComplete && verStatus !== "REJECTED" && (
           <div className="tb-banner tb-banner-gold tb-fade-in tb-stagger-1" style={{ marginBottom: 20 }}>
             <div className="tb-banner-dot tb-banner-dot-gold" />
             <div style={{ flex: 1 }}>

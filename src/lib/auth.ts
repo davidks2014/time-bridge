@@ -116,6 +116,7 @@ export const authOptions: NextAuthOptions = {
             id: true,
             role: true,
             verificationStatus: true,
+            rejectReason: true,
             proofOfLifeStage: true,
             name: true,
             identificationNo: true,
@@ -128,6 +129,7 @@ export const authOptions: NextAuthOptions = {
           (session.user as any).id = user.id;
           (session.user as any).role = user.role;
           (session.user as any).verificationStatus = user.verificationStatus;
+          (session.user as any).rejectReason = user.rejectReason ?? null;
           (session.user as any).proofOfLifeStage = user.proofOfLifeStage;
           (session.user as any).profileComplete = !!(
             user.identificationNo &&
@@ -165,6 +167,7 @@ export const authOptions: NextAuthOptions = {
               name: true,
               role: true,
               verificationStatus: true,
+              rejectReason: true,
               proofOfLifeStage: true,
               identificationNo: true,
               phoneNumber: true,
@@ -177,6 +180,7 @@ export const authOptions: NextAuthOptions = {
             token.userName = dbUser.name;
             token.role = dbUser.role;
             token.verificationStatus = dbUser.verificationStatus;
+            token.rejectReason = dbUser.rejectReason ?? null;
             token.proofOfLifeStage = dbUser.proofOfLifeStage;
             token.profileComplete = !!(
               dbUser.identificationNo &&
