@@ -101,6 +101,7 @@ export async function POST(req: Request, { params }: Params) {
 
     const rawSize = body?.mediaSizeBytes ?? body?.bytes ?? body?.originalFileSize ?? 0;
     const mediaSizeBytes = BigInt(Number(rawSize) || 0);
+    const mediaSizeMB = Number(body?.mediaSizeMB ?? 0);
 
     if (!mediaUrl) {
       return Response.json({ error: "mediaUrl is required." }, { status: 400 });
@@ -229,6 +230,7 @@ export async function POST(req: Request, { params }: Params) {
           mediaFileName,
           mediaMimeType,
           mediaSizeBytes,
+          mediaSizeMB, // save for future deletion tracking
         },
         select: {
           id: true,

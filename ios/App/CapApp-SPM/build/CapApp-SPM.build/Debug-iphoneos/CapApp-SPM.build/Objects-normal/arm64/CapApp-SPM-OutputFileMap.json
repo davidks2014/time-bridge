@@ -1,0 +1,19 @@
+{
+  "" : {
+    "diagnostics" : "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/build/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM-primary.dia",
+    "emit-module-dependencies" : "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/build/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/build/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM-primary-emit-module.dia",
+    "pch" : "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/build/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/build/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM-primary.swiftdeps"
+  },
+  "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/Sources/CapApp-SPM/CapApp-SPM.swift" : {
+    "const-values" : "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/build/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.swiftconstvalues",
+    "dependencies" : "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/build/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.d",
+    "diagnostics" : "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/build/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.dia",
+    "index-unit-output-path" : "/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.o",
+    "llvm-bc" : "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/build/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.bc",
+    "object" : "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/build/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.o",
+    "swift-dependencies" : "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/build/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM.swiftdeps",
+    "swiftmodule" : "/Users/leekoksang/time-bridge/ios/App/CapApp-SPM/build/CapApp-SPM.build/Debug-iphoneos/CapApp-SPM.build/Objects-normal/arm64/CapApp-SPM~partial.swiftmodule"
+  }
+}

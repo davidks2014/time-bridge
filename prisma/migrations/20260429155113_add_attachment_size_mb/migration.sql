@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "MemoryAttachment" ADD COLUMN     "mediaSizeMB" DOUBLE PRECISION NOT NULL DEFAULT 0;

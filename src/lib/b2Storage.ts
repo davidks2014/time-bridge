@@ -27,7 +27,7 @@ export async function uploadToB2(
   fileName: string,
   contentType: string,
   folder: string = "memories"
-): Promise<string> {
+): Promise<{ url: string; key: string }> {
   const key = `${folder}/${Date.now()}-${fileName}`;
 
   await s3.send(
@@ -39,7 +39,7 @@ export async function uploadToB2(
     })
   );
 
-  return `${CDN_URL}/file/${BUCKET}/${key}`;
+  return { url: `${CDN_URL}/file/${BUCKET}/${key}`, key };
 }
 
 export async function generatePresignedUploadUrl(

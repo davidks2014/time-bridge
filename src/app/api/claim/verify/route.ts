@@ -117,7 +117,8 @@ export async function POST(req: Request) {
       const safeName = crypto.randomBytes(8).toString("hex");
       const fileName = `${identificationNo}_${side}_${Date.now()}_${safeName}`;
 
-      return uploadToB2(bytes, fileName, file.type, "documents");
+      const { url } = await uploadToB2(bytes, fileName, file.type, "documents");
+      return url;
     }
 
     const idImageFrontUrl = await uploadDocument(idFront, "front");

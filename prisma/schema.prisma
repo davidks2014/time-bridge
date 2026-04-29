@@ -290,6 +290,12 @@ model User {
   verificationDocBackPublicId  String?
 
   // =========================================
+  // Storage Tracking
+  // =========================================
+  storageUsedMB  Float @default(0)
+  storageLimitMB Float @default(1024)
+
+  // =========================================
   // Timestamps
   // =========================================
   createdAt DateTime @default(now())
@@ -442,12 +448,14 @@ model MemoryAttachment {
   // Attachment type
   type AttachmentType
 
-  // Cloudinary / media metadata
+  // B2 / media metadata
   mediaUrl       String
   mediaPublicId  String
   mediaFileName  String?
   mediaMimeType  String?
   mediaSizeBytes BigInt @default(0)
+  // Size in MB — used for storage decrement on delete
+  mediaSizeMB    Float  @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

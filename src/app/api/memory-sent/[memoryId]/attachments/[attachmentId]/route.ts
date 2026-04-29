@@ -1,5 +1,22 @@
+/**
+ * API: DELETE /api/memory-sent/[memoryId]/attachments/[attachmentId]
+ *
+ * Purpose: Delete a single attachment from a memory item.
+ * Deletes the file from Backblaze B2, then removes the DB record,
+ * then decrements the owner's storage usage (storageUsedMB).
+ *
+ * Query params:
+ *   - itemId: string (required) — the memory item this attachment belongs to
+ *
+ * Rules:
+ *   - Must be logged in
+ *   - Must own the memory
+ *   - Memory must not be locked (no released items)
+ */
+
 import { prisma } from "@/lib/prisma";
 import { deleteFromB2ByKey } from "@/lib/b2Storage";
+import { decrementStorage } from "@/lib/storageTracking";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
@@ -16,18 +33,6 @@ function normalizeEmail(raw: string): string {
   return String(raw ?? "").trim().toLowerCase();
 }
 
-
-/**
- * DELETE /api/memory-sent/[memoryId]/attachments/[attachmentId]?itemId=...
- *
- * Rules:
- * - must be logged in
- * - must own the memory
- * - memory must not be locked
- * - attachment must belong to an item inside this memory
- * - delete from Cloudinary first, then DB
- * - decrease user's storageUsedBytes
- */
 export async function DELETE(req: Request, { params }: Params) {
   try {
     const { memoryId, attachmentId } = await params;
@@ -39,11 +44,7 @@ export async function DELETE(req: Request, { params }: Params) {
 
     const user = await prisma.user.findUnique({
       where: { email: normalizeEmail(session.user.email) },
-      select: {
-        id: true,
-        storageUsedBytes: true,
-        storageLimitBytes: true,
-      },
+      select: { id: true },
     });
 
     if (!user) {
@@ -59,18 +60,10 @@ export async function DELETE(req: Request, { params }: Params) {
 
     // 1) Check memory ownership and lock rule
     const memory = await prisma.memoryCollection.findFirst({
-      where: {
-        id: memoryId,
-        ownerId: user.id,
-      },
+      where: { id: memoryId, ownerId: user.id },
       select: {
         id: true,
-        items: {
-          select: {
-            id: true,
-            status: true,
-          },
-        },
+        items: { select: { id: true, status: true } },
       },
     });
 
@@ -81,10 +74,7 @@ export async function DELETE(req: Request, { params }: Params) {
     const hasReleasedItem = memory.items.some((item) => item.status === "RELEASED");
     if (hasReleasedItem) {
       return Response.json(
-        {
-          error:
-            "This memory is locked because at least one message has already been released.",
-        },
+        { error: "This memory is locked because at least one message has already been released." },
         { status: 400 }
       );
     }
@@ -92,23 +82,17 @@ export async function DELETE(req: Request, { params }: Params) {
     // 2) Ensure the item belongs to this memory
     const itemExistsInMemory = memory.items.some((item) => item.id === itemId);
     if (!itemExistsInMemory) {
-      return Response.json(
-        { error: "Item not found in this memory." },
-        { status: 404 }
-      );
+      return Response.json({ error: "Item not found in this memory." }, { status: 404 });
     }
 
-    // 3) Find attachment and ensure it belongs to that item
+    // 3) Find attachment — select mediaSizeMB for storage decrement
     const attachment = await prisma.memoryAttachment.findFirst({
-      where: {
-        id: attachmentId,
-        itemId,
-      },
+      where: { id: attachmentId, itemId },
       select: {
         id: true,
         type: true,
-        mediaPublicId: true,
-        mediaSizeBytes: true,
+        mediaPublicId: true, // B2 object key
+        mediaSizeMB: true,   // needed for storage decrement
       },
     });
 
@@ -116,40 +100,18 @@ export async function DELETE(req: Request, { params }: Params) {
       return Response.json({ error: "Attachment not found." }, { status: 404 });
     }
 
-    // 4) Delete from B2 (best-effort, non-fatal for old Cloudinary files)
+    // 4) Delete file from Backblaze B2 using the stored object key
     await deleteFromB2ByKey(attachment.mediaPublicId);
 
-    // 5) Delete from DB and decrease quota in one transaction
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.memoryAttachment.delete({
-        where: { id: attachment.id },
-      });
+    // 5) Delete attachment record from DB
+    await prisma.memoryAttachment.delete({ where: { id: attachment.id } });
 
-      const currentUsed = BigInt(user.storageUsedBytes);
-      const attachmentBytes = BigInt(attachment.mediaSizeBytes);
-      const nextUsed = currentUsed > attachmentBytes ? currentUsed - attachmentBytes : BigInt(0);
-
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          storageUsedBytes: nextUsed,
-        },
-      });
-
-      return {
-        nextUsed,
-        limitBytes: BigInt(user.storageLimitBytes),
-      };
-    });
+    // 6) Decrement user storage by the size of the deleted file
+    await decrementStorage(user.id, attachment.mediaSizeMB);
 
     return Response.json({
       message: "Attachment deleted successfully.",
       attachmentId: attachment.id,
-      storage: {
-        usedBytes: result.nextUsed.toString(),
-        limitBytes: result.limitBytes.toString(),
-        remainingBytes: (result.limitBytes - result.nextUsed).toString(),
-      },
     });
   } catch (err) {
     console.error("DELETE /api/memory-sent/[memoryId]/attachments/[attachmentId] error:", err);

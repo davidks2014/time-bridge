@@ -14,6 +14,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { deleteFromB2ByKey } from "@/lib/b2Storage";
+import { decrementStorage } from "@/lib/storageTracking";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import type { MemoryItemStatus } from "@prisma/client";
@@ -131,9 +132,13 @@ export async function GET(_: Request, { params }: Params) {
 
 /**
  * DELETE /api/memory-sent/[memoryId]
- * - BLOCK if any item is already RELEASED
- * - Delete Cloudinary files
- * - Deduct total attachment bytes from user's storageUsedBytes
+ *
+ * Purpose: Delete an entire memory and all its attachments.
+ * 1. Block if any item is already RELEASED
+ * 2. Fetch all attachments with B2 keys and sizes
+ * 3. Delete each file from B2 (best-effort, non-fatal)
+ * 4. Delete memory from DB (cascade deletes items + attachments)
+ * 5. Decrement user storage by total MB of deleted files
  */
 export async function DELETE(_: Request, { params }: Params) {
   try {
@@ -146,11 +151,7 @@ export async function DELETE(_: Request, { params }: Params) {
 
     const user = await prisma.user.findUnique({
       where: { email: normalizeEmail(session.user.email) },
-      select: {
-        id: true,
-        storageUsedBytes: true,
-        storageLimitBytes: true,
-      },
+      select: { id: true },
     });
 
     if (!user) {
@@ -158,10 +159,7 @@ export async function DELETE(_: Request, { params }: Params) {
     }
 
     const memory = await prisma.memoryCollection.findFirst({
-      where: {
-        id: memoryId,
-        ownerId: user.id,
-      },
+      where: { id: memoryId, ownerId: user.id },
       select: {
         id: true,
         items: {
@@ -170,10 +168,8 @@ export async function DELETE(_: Request, { params }: Params) {
             status: true,
             attachments: {
               select: {
-                id: true,
-                type: true,
-                mediaPublicId: true,
-                mediaSizeBytes: true,
+                mediaPublicId: true, // B2 object key for deletion
+                mediaSizeMB: true,   // size for storage decrement
               },
             },
           },
@@ -194,56 +190,35 @@ export async function DELETE(_: Request, { params }: Params) {
 
     if (hasReleasedItem) {
       return Response.json(
-        {
-          error:
-            "This memory cannot be deleted because at least one message has already been released.",
-        },
+        { error: "This memory cannot be deleted because at least one message has already been released." },
         { status: 400 }
       );
     }
 
     const allAttachments = memory.items.flatMap((item) => item.attachments ?? []);
 
-    const totalAttachmentBytes = allAttachments.reduce((sum, attachment) => {
-      return sum + BigInt(attachment.mediaSizeBytes);
-    }, BigInt(0));
-
-    // 1) Delete B2 assets first (best-effort, errors are non-fatal)
-    for (const attachment of allAttachments) {
-      await deleteFromB2ByKey(attachment.mediaPublicId);
+    // Delete all attachment files from B2 (log errors but don't block deletion)
+    let totalSizeMB = 0;
+    for (const att of allAttachments) {
+      try {
+        await deleteFromB2ByKey(att.mediaPublicId);
+        totalSizeMB += att.mediaSizeMB;
+      } catch (b2Err) {
+        console.error("B2 delete error for key:", att.mediaPublicId, b2Err);
+      }
     }
 
-    // 2) Delete memory + adjust storage in one transaction
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.memoryCollection.delete({
-        where: { id: memory.id },
-      });
+    // Delete memory from DB (cascade deletes items + attachments)
+    await prisma.memoryCollection.delete({ where: { id: memory.id } });
 
-      const currentUsed = BigInt(user.storageUsedBytes);
-      const nextUsed =
-        currentUsed > totalAttachmentBytes ? currentUsed - totalAttachmentBytes : BigInt(0);
-
-      await tx.user.update({
-        where: { id: user.id },
-        data: {
-          storageUsedBytes: nextUsed,
-        },
-      });
-
-      return {
-        nextUsed,
-        limitBytes: BigInt(user.storageLimitBytes),
-      };
-    });
+    // Decrement user storage by total size of deleted files
+    if (totalSizeMB > 0) {
+      await decrementStorage(user.id, totalSizeMB);
+    }
 
     return Response.json({
       message: "Memory deleted successfully.",
       deletedAttachmentCount: allAttachments.length,
-      storage: {
-        usedBytes: result.nextUsed.toString(),
-        limitBytes: result.limitBytes.toString(),
-        remainingBytes: (result.limitBytes - result.nextUsed).toString(),
-      },
     });
   } catch (err) {
     console.error("DELETE /api/memory-sent/[memoryId] error:", err);
