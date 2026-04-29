@@ -1,15 +1,14 @@
 /**
  * src/middleware.ts
  *
- * Global route protection for Time Bridge.
+ * Route protection for Time Bridge.
  *
- * Simplified rules:
- * 1. Public routes — always accessible without login
- * 2. Not logged in + protected route → redirect to /login
- * 3. Admin → redirect to /admin/verification when hitting /dashboard
- * 4. All other logged-in users → allow everything
- *    Profile and verification shown as UI banners, not middleware redirects
- *    Memory creation blocked at API level only
+ * Access matrix:
+ *   NOT_LOGGED_IN  → PUBLIC routes only, else → /login
+ *   ADMIN          → all routes allowed
+ *   PENDING        → /pending-verification, /complete-profile only, else → /pending-verification
+ *   REJECTED       → /pending-verification only, else → /pending-verification
+ *   APPROVED user  → all routes except /admin/* and unverified-only pages
  */
 
 import { getToken } from "next-auth/jwt";
@@ -19,58 +18,74 @@ import type { NextRequest } from "next/server";
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // ── Always public — no auth needed ───────────────────────────────────────
-  const publicRoutes = [
+  // ── STEP 1: Public routes — no auth needed ───────────────────────────────
+  const PUBLIC = [
+    "/",
     "/login",
     "/register",
-    "/pending-verification",
-    "/complete-profile",
-    "/claim",
+    "/privacy",
+    "/terms",
+    "/data-deletion",
+    "/contact",
   ];
 
-  // Also allow receiver invite routes publicly
   if (
-    publicRoutes.includes(pathname) ||
+    PUBLIC.includes(pathname) ||
     pathname.startsWith("/receiver") ||
     pathname.startsWith("/claim")
   ) {
     return NextResponse.next();
   }
 
-  // ── Get JWT token ─────────────────────────────────────────────────────────
+  // ── STEP 2: Require login ─────────────────────────────────────────────────
   const token = await getToken({
     req,
     secret: process.env.NEXTAUTH_SECRET,
   });
 
-  // ── Not logged in → redirect to login ────────────────────────────────────
   if (!token) {
-    const loginUrl = new URL("/login", req.url);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(new URL("/login", req.url));
   }
 
-  const role = (token?.role as string | undefined) ?? "USER";
-  const verificationStatus = (token?.verificationStatus as string | undefined) ?? "PENDING";
+  // ── STEP 3: Extract role and verificationStatus ───────────────────────────
+  const role               = (token.role               as string | undefined) ?? "USER";
+  const verificationStatus = (token.verificationStatus as string | undefined) ?? "PENDING";
 
-  // ── Admin routes — only admins allowed ───────────────────────────────────
-  if (pathname.startsWith("/admin")) {
-    if (role !== "ADMIN") {
-      return NextResponse.redirect(new URL("/dashboard", req.url));
-    }
+  // ── STEP 4: ADMIN — allow everything ─────────────────────────────────────
+  if (role === "ADMIN") {
     return NextResponse.next();
   }
 
-  // ── Normal users must be APPROVED to access the app ──────────────────────
-  if (role !== "ADMIN" && verificationStatus !== "APPROVED") {
+  // ── STEP 5: PENDING user — only pending/complete-profile ─────────────────
+  if (verificationStatus === "PENDING") {
+    if (pathname === "/pending-verification" || pathname === "/complete-profile") {
+      return NextResponse.next();
+    }
     return NextResponse.redirect(new URL("/pending-verification", req.url));
   }
 
-  // ── All other logged-in users → allow ────────────────────────────────────
+  // ── STEP 6: REJECTED user — only pending-verification ────────────────────
+  if (verificationStatus === "REJECTED") {
+    if (pathname === "/pending-verification") {
+      return NextResponse.next();
+    }
+    return NextResponse.redirect(new URL("/pending-verification", req.url));
+  }
+
+  // ── STEP 7: APPROVED user — block admin and unverified-only pages ─────────
+  if (
+    pathname.startsWith("/admin") ||
+    pathname === "/pending-verification" ||
+    pathname === "/complete-profile"
+  ) {
+    return NextResponse.redirect(new URL("/dashboard", req.url));
+  }
+
   return NextResponse.next();
 }
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|uploads|.*\\..*).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)",
   ],
 };
