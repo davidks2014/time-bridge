@@ -66,11 +66,15 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(new URL("/complete-profile", req.url));
     }
 
-    // Profile submitted, awaiting admin review
-    if (pathname === "/pending-verification" || pathname === "/complete-profile") {
+    // Profile submitted, awaiting admin review — allow dashboard and status pages
+    if (
+      pathname === "/dashboard" ||
+      pathname === "/pending-verification" ||
+      pathname === "/complete-profile"
+    ) {
       return NextResponse.next();
     }
-    return NextResponse.redirect(new URL("/pending-verification", req.url));
+    return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 
   // ── STEP 6: REJECTED user — only pending-verification ────────────────────

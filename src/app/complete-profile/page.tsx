@@ -136,8 +136,8 @@ export default function CompleteProfilePage() {
       if (!res.ok) { setError(json?.error ?? "Submission failed. Please try again."); return; }
 
       setSubmittingMessage("Almost done...");
-      await update(); // force JWT refresh so middleware sees updated verificationDocFrontUrl
-      router.push("/pending-verification");
+      await update(); // force JWT refresh so middleware sees updated profileComplete
+      router.push("/dashboard");
     } catch (err: any) {
       setError(err?.message ?? "Network error. Please try again.");
     } finally {
