@@ -135,7 +135,7 @@ export default function CompleteProfilePage() {
       if (!res.ok) { setError(json?.error ?? "Submission failed. Please try again."); return; }
 
       setSubmittingMessage("Almost done...");
-      router.push("/dashboard");
+      router.push("/pending-verification");
     } catch (err: any) {
       setError(err?.message ?? "Network error. Please try again.");
     } finally {

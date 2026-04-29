@@ -147,35 +147,45 @@ export const authOptions: NextAuthOptions = {
       return `${baseUrl}/dashboard`;
     },
 
-    async jwt({ token, user: _user, trigger: _trigger }) {
-      // Always re-fetch from DB so verificationStatus, role, and proofOfLifeStage
-      // are never stale — admin changes are visible on the next session access
-      if (token.email) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: String(token.email).toLowerCase() },
-          select: {
-            id: true,
-            name: true,
-            role: true,
-            verificationStatus: true,
-            proofOfLifeStage: true,
-            identificationNo: true,
-            phoneNumber: true,
-            address: true,
-          },
-        });
+    async jwt({ token, user }) {
+      // On first login, seed the token from the provider user object
+      if (user) {
+        token.email = user.email;
+        token.role = (user as any).role;
+        token.verificationStatus = (user as any).verificationStatus;
+      }
 
-        if (dbUser) {
-          token.userId = dbUser.id;
-          token.userName = dbUser.name;
-          token.role = dbUser.role;
-          token.verificationStatus = dbUser.verificationStatus;
-          token.proofOfLifeStage = dbUser.proofOfLifeStage;
-          token.profileComplete = !!(
-            dbUser.identificationNo &&
-            dbUser.phoneNumber &&
-            dbUser.address
-          );
+      // On every request re-fetch from DB so admin changes are reflected immediately
+      if (token.email) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { email: String(token.email).toLowerCase() },
+            select: {
+              id: true,
+              name: true,
+              role: true,
+              verificationStatus: true,
+              proofOfLifeStage: true,
+              identificationNo: true,
+              phoneNumber: true,
+              address: true,
+            },
+          });
+
+          if (dbUser) {
+            token.userId = dbUser.id;
+            token.userName = dbUser.name;
+            token.role = dbUser.role;
+            token.verificationStatus = dbUser.verificationStatus;
+            token.proofOfLifeStage = dbUser.proofOfLifeStage;
+            token.profileComplete = !!(
+              dbUser.identificationNo &&
+              dbUser.phoneNumber &&
+              dbUser.address
+            );
+          }
+        } catch (e) {
+          console.error("JWT refresh error:", e);
         }
       }
 

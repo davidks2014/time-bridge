@@ -77,8 +77,21 @@ export default function DashboardPage() {
     if (status === "unauthenticated") router.push("/login");
   }, [status, router]);
 
+  const guardVerification = useCallback(async () => {
+    if (role === "ADMIN") return;
+    try {
+      const res  = await fetch("/api/me");
+      const json = await res.json();
+      if (!res.ok) return;
+      if (json.user?.verificationStatus !== "APPROVED") {
+        router.push("/pending-verification");
+      }
+    } catch {}
+  }, [role, router]);
+
   useEffect(() => {
     if (status === "authenticated") {
+      guardVerification();
       fetch("/api/auth/record-device", { method: "POST" }).catch(() => {});
       loadDashboard();
     }

@@ -50,6 +50,7 @@ export async function middleware(req: NextRequest) {
   }
 
   const role = (token?.role as string | undefined) ?? "USER";
+  const verificationStatus = (token?.verificationStatus as string | undefined) ?? "PENDING";
 
   // ── Admin routes — only admins allowed ───────────────────────────────────
   if (pathname.startsWith("/admin")) {
@@ -57,6 +58,11 @@ export async function middleware(req: NextRequest) {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
     return NextResponse.next();
+  }
+
+  // ── Normal users must be APPROVED to access the app ──────────────────────
+  if (role !== "ADMIN" && verificationStatus !== "APPROVED") {
+    return NextResponse.redirect(new URL("/pending-verification", req.url));
   }
 
   // ── All other logged-in users → allow ────────────────────────────────────
