@@ -59,7 +59,7 @@ export async function middleware(req: NextRequest) {
   // ── STEP 5: Non-APPROVED users — limited to key pages ───────────────────
   if (verificationStatus !== "APPROVED") {
     const allowed = ["/dashboard", "/complete-profile", "/pending-verification"];
-    if (allowed.includes(pathname)) return NextResponse.next();
+    if (allowed.some((r) => pathname.startsWith(r))) return NextResponse.next();
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
 

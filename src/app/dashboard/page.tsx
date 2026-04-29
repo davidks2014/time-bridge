@@ -73,6 +73,7 @@ export default function DashboardPage() {
   const rejectReason = (session?.user as any)?.rejectReason as string | null | undefined;
   const profileComplete = (session?.user as any)?.profileComplete;
   const userName     = session?.user?.name ?? "Friend";
+  const isApproved   = verStatus === "APPROVED" || role === "ADMIN";
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -221,11 +222,11 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Verification pending banner ── */}
-        {verStatus === "PENDING" && (
+        {/* ── Verification pending banner (profile submitted, awaiting review) ── */}
+        {verStatus === "PENDING" && profileComplete && (
           <div className="tb-banner tb-banner-info tb-fade-in tb-stagger-1" style={{ marginBottom: 20 }}>
             <div className="tb-banner-dot tb-banner-dot-blue" />
-            <span>Your identity is being verified. You can create memories once approved — usually within 1–2 business days.</span>
+            <span>Your account is under review. You will be notified by email once approved.</span>
           </div>
         )}
 
@@ -284,7 +285,8 @@ export default function DashboardPage() {
         <button
           className="tb-fade-in tb-stagger-4"
           onClick={() => setShowModal(true)}
-          disabled={!profileComplete || verStatus === "PENDING"}
+          disabled={!isApproved}
+          title={!isApproved ? "Account verification required" : undefined}
           style={{
             width: "100%",
             background: "var(--earth)",
@@ -292,8 +294,8 @@ export default function DashboardPage() {
             border: "none",
             borderRadius: "var(--radius-lg)",
             padding: "18px 24px",
-            cursor: !profileComplete || verStatus === "PENDING" ? "not-allowed" : "pointer",
-            opacity: !profileComplete || verStatus === "PENDING" ? 0.5 : 1,
+            cursor: !isApproved ? "not-allowed" : "pointer",
+            opacity: !isApproved ? 0.5 : 1,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -306,7 +308,7 @@ export default function DashboardPage() {
             letterSpacing: "1px",
           }}
           onMouseEnter={(e) => {
-            if (profileComplete && verStatus !== "PENDING") {
+            if (isApproved) {
               e.currentTarget.style.background = "var(--earth-mid)";
               e.currentTarget.style.transform = "translateY(-2px)";
               e.currentTarget.style.boxShadow = "var(--shadow-lift)";
@@ -396,8 +398,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Quick actions ── */}
-        {memories.length > 0 && (
+        {/* ── Quick actions (APPROVED only) ── */}
+        {isApproved && memories.length > 0 && (
           <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <button
               className="tb-btn tb-btn-outline"
