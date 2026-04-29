@@ -10,6 +10,7 @@ type Attachment = {
   mediaPublicId: string;
   mediaFileName: string | null;
   mediaMimeType: string | null;
+  mediaSizeBytes: number;
 };
 
 type Receiver = {
@@ -204,6 +205,7 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
         mediaPublicId: signJson.key,
         mediaFileName: file.name,
         mediaMimeType: file.type,
+        mediaSizeBytes: file.size,
       }]);
     } catch {
       setError("Upload failed. Please try again.");
