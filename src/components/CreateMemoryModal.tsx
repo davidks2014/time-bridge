@@ -160,6 +160,14 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
       });
       if (!uploadRes.ok) throw new Error("Upload to storage failed");
 
+      // Step 3: Report file size to server for storage tracking
+      const sizeMB = file.size / (1024 * 1024);
+      fetch("/api/media/confirm-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sizeMB }),
+      }).catch(() => {}); // non-blocking — don't fail upload if tracking fails
+
       setAttachments((prev) => [...prev, {
         type: itemType,
         mediaUrl: signJson.cdnUrl,
