@@ -107,7 +107,7 @@ export default function RegisterPage() {
             marginBottom: 28,
             lineHeight: 1.6,
           }}>
-            Create an account to start preserving your memories for those you love
+            We keep your love. We deliver it when they need it most.
           </p>
 
           {error && (

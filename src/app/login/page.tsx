@@ -116,7 +116,7 @@ function LoginForm() {
             textAlign: "center",
             marginBottom: 28,
           }}>
-            Your memories are safely waiting
+            We keep your love. We deliver it when they need it most.
           </p>
 
           {error && (
