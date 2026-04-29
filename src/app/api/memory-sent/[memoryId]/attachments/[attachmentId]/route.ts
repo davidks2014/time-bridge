@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import cloudinary from "@/lib/cloudinary";
+import { deleteFromB2ByKey } from "@/lib/b2Storage";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
@@ -16,9 +16,6 @@ function normalizeEmail(raw: string): string {
   return String(raw ?? "").trim().toLowerCase();
 }
 
-function inferCloudinaryResourceType(type: "IMAGE" | "VIDEO"): "image" | "video" {
-  return type === "VIDEO" ? "video" : "image";
-}
 
 /**
  * DELETE /api/memory-sent/[memoryId]/attachments/[attachmentId]?itemId=...
@@ -119,20 +116,8 @@ export async function DELETE(req: Request, { params }: Params) {
       return Response.json({ error: "Attachment not found." }, { status: 404 });
     }
 
-    // 4) Delete from Cloudinary first
-    try {
-      const resourceType = inferCloudinaryResourceType(attachment.type);
-
-      await cloudinary.uploader.destroy(attachment.mediaPublicId, {
-        resource_type: resourceType,
-      });
-    } catch (cloudinaryError) {
-      console.error("Cloudinary delete error:", cloudinaryError);
-      return Response.json(
-        { error: "Failed to delete attachment from Cloudinary." },
-        { status: 500 }
-      );
-    }
+    // 4) Delete from B2 (best-effort, non-fatal for old Cloudinary files)
+    await deleteFromB2ByKey(attachment.mediaPublicId);
 
     // 5) Delete from DB and decrease quota in one transaction
     const result = await prisma.$transaction(async (tx) => {

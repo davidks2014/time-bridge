@@ -1,3 +1,7 @@
+// Media URL helpers — supports both B2 CDN (new) and Cloudinary (existing files)
+
+const CDN_URL = process.env.NEXT_PUBLIC_CDN_URL ?? "https://cdn.timebridge.sg";
+
 type DeliveryResourceType = "image" | "video";
 
 type OptimizedImageOptions = {
@@ -10,6 +14,11 @@ type OptimizedVideoOptions = {
   height?: number;
 };
 
+function isB2Url(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return url.startsWith(CDN_URL) || url.includes("backblazeb2.com");
+}
+
 function getCloudName(): string | null {
   const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME?.trim();
   return cloudName || null;
@@ -17,12 +26,6 @@ function getCloudName(): string | null {
 
 /**
  * Extract Cloudinary public ID from a full Cloudinary delivery URL.
- *
- * Example input:
- * https://res.cloudinary.com/<cloud>/image/upload/v123/folder/file.jpg
- *
- * Output:
- * folder/file
  */
 export function extractCloudinaryPublicIdFromUrl(
   mediaUrl: string | null | undefined
@@ -61,20 +64,13 @@ function buildTransformationString(params: {
   height?: number;
 }): string {
   const { width, height } = params;
-
   const parts: string[] = ["f_auto", "q_auto", "c_limit"];
-
   if (width) parts.push(`w_${width}`);
   if (height) parts.push(`h_${height}`);
-
   return parts.join(",");
 }
 
-/**
- * Build optimized Cloudinary delivery URL without importing Cloudinary SDK.
- * Safe for client components.
- */
-export function buildOptimizedCloudinaryUrl(params: {
+function buildOptimizedCloudinaryUrl(params: {
   mediaUrl?: string | null;
   mediaPublicId?: string | null;
   resourceType: DeliveryResourceType;
@@ -90,11 +86,7 @@ export function buildOptimizedCloudinaryUrl(params: {
     return mediaUrl ?? null;
   }
 
-  const transformation = buildTransformationString({
-    resourceType,
-    width,
-    height,
-  });
+  const transformation = buildTransformationString({ resourceType, width, height });
 
   return `https://res.cloudinary.com/${cloudName}/${resourceType}/upload/${transformation}/${publicId}`;
 }
@@ -104,6 +96,9 @@ export function getOptimizedImageUrl(
   mediaPublicId?: string | null,
   options: OptimizedImageOptions = {}
 ): string | null {
+  // B2 CDN URLs are served directly — no transformation layer
+  if (isB2Url(mediaUrl)) return mediaUrl ?? null;
+
   return buildOptimizedCloudinaryUrl({
     mediaUrl,
     mediaPublicId,
@@ -118,6 +113,9 @@ export function getOptimizedVideoUrl(
   mediaPublicId?: string | null,
   options: OptimizedVideoOptions = {}
 ): string | null {
+  // B2 CDN URLs are served directly — no transformation layer
+  if (isB2Url(mediaUrl)) return mediaUrl ?? null;
+
   return buildOptimizedCloudinaryUrl({
     mediaUrl,
     mediaPublicId,

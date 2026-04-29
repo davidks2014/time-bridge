@@ -4,7 +4,7 @@
  * Purpose:
  * - Called by Google users after first login
  * - Updates their profile with NRIC, phone, address
- * - Uploads verification documents to Cloudinary
+ * - Uploads verification documents to B2 storage
  * - Saves consent records for PDPA compliance
  * - Sets verificationStatus to PENDING for admin review
  */
@@ -12,7 +12,7 @@
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import cloudinary from "@/lib/cloudinary";
+import { uploadToB2 } from "@/lib/b2Storage";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -72,8 +72,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5) Upload verification document to Cloudinary
-    async function uploadToCloudinary(file: File, side: string): Promise<string> {
+    // 5) Upload verification document to B2
+    async function uploadDocument(file: File, side: string): Promise<string> {
       const allowed = ["image/jpeg", "image/png", "image/webp"];
       if (!allowed.includes(file.type)) {
         throw new Error("Only JPG/PNG/WebP images are allowed.");
@@ -84,34 +84,17 @@ export async function POST(req: Request) {
 
       const bytes = Buffer.from(await file.arrayBuffer());
       const safeName = crypto.randomBytes(8).toString("hex");
+      const fileName = `${identificationNo}_${side}_${Date.now()}_${safeName}`;
 
-      return new Promise<string>((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: "time-bridge/verification",
-            resource_type: "image",
-            transformation: [{ width: 1000, crop: "limit" }],
-            public_id: `${identificationNo}_${side}_${Date.now()}_${safeName}`,
-            overwrite: false,
-          },
-          (error, result) => {
-            if (error || !result?.secure_url) {
-              reject(new Error("Cloudinary upload failed."));
-              return;
-            }
-            resolve(result.secure_url);
-          }
-        );
-        stream.end(bytes);
-      });
+      return uploadToB2(bytes, fileName, file.type, "documents");
     }
 
-    const verificationDocFrontUrl = await uploadToCloudinary(idFront, "front");
+    const verificationDocFrontUrl = await uploadDocument(idFront, "front");
 
     const idBack = form.get("idBack");
     let verificationDocBackUrl: string | null = null;
     if (idBack instanceof File && idBack.size > 0) {
-      verificationDocBackUrl = await uploadToCloudinary(idBack, "back");
+      verificationDocBackUrl = await uploadDocument(idBack, "back");
     }
 
     // 6) Update user profile
@@ -158,7 +141,7 @@ export async function POST(req: Request) {
   } catch (err: any) {
     console.error("complete-profile error:", err);
     const msg = String(err?.message ?? "");
-    if (msg.includes("Only JPG") || msg.includes("Max 5MB") || msg.includes("Cloudinary")) {
+    if (msg.includes("Only JPG") || msg.includes("Max 5MB") || msg.includes("upload")) {
       return Response.json({ error: msg }, { status: 400 });
     }
     return Response.json({ error: "Server error." }, { status: 500 });

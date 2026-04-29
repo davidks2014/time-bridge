@@ -3,7 +3,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import cloudinary from "@/lib/cloudinary";
+import { deleteFromB2ByKey } from "@/lib/b2Storage";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import type { AttachmentType } from "@prisma/client";
@@ -43,9 +43,6 @@ function normalizeAttachmentType(raw: unknown): AttachmentType {
   throw new Error("INVALID_ATTACHMENT_TYPE");
 }
 
-function inferCloudinaryResourceType(type: "IMAGE" | "VIDEO"): "image" | "video" {
-  return type === "VIDEO" ? "video" : "image";
-}
 
 function validateAttachmentSize(type: AttachmentType, mediaSizeBytes: bigint) {
   if (type === "IMAGE" && mediaSizeBytes > MAX_IMAGE_BYTES) {
@@ -113,18 +110,11 @@ function parseAttachments(raw: unknown): IncomingAttachment[] {
   });
 }
 
-async function cleanupCloudinaryUploads(attachments: Array<{
-  type: AttachmentType;
+async function cleanupB2Uploads(attachments: Array<{
   mediaPublicId: string;
 }>) {
   for (const attachment of attachments) {
-    try {
-      await cloudinary.uploader.destroy(attachment.mediaPublicId, {
-        resource_type: inferCloudinaryResourceType(attachment.type),
-      });
-    } catch (cleanupError) {
-      console.error("Cloudinary cleanup error:", cleanupError);
-    }
+    await deleteFromB2ByKey(attachment.mediaPublicId);
   }
 }
 
@@ -211,7 +201,7 @@ export async function POST(req: Request) {
             })
             .filter(Boolean) as Array<{ type: AttachmentType; mediaPublicId: string }>;
 
-          await cleanupCloudinaryUploads(cleanupTargets);
+          await cleanupB2Uploads(cleanupTargets);
         } catch (cleanupErr) {
           console.error("Oversized upload cleanup failed:", cleanupErr);
         }
@@ -332,7 +322,7 @@ export async function POST(req: Request) {
 
     if (projectedUsedBytes > limitBytes) {
       if (attachments.length > 0) {
-        await cleanupCloudinaryUploads(
+        await cleanupB2Uploads(
           attachments.map((attachment) => ({
             type: attachment.type,
             mediaPublicId: attachment.mediaPublicId,
@@ -448,7 +438,7 @@ export async function POST(req: Request) {
   } catch (err) {
     // Best-effort cleanup for unexpected failures after direct Cloudinary upload
     if (parsedAttachmentsForCleanup.length > 0) {
-      await cleanupCloudinaryUploads(
+      await cleanupB2Uploads(
         parsedAttachmentsForCleanup.map((attachment) => ({
           type: attachment.type,
           mediaPublicId: attachment.mediaPublicId,

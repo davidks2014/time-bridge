@@ -13,7 +13,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
-import cloudinary from "@/lib/cloudinary";
+import { deleteFromB2ByKey } from "@/lib/b2Storage";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import type { MemoryItemStatus } from "@prisma/client";
@@ -26,9 +26,6 @@ function normalizeEmail(raw: string): string {
   return String(raw ?? "").trim().toLowerCase();
 }
 
-function inferCloudinaryResourceType(type: "IMAGE" | "VIDEO"): "image" | "video" {
-  return type === "VIDEO" ? "video" : "image";
-}
 
 /**
  * GET /api/memory-sent/[memoryId]
@@ -211,20 +208,9 @@ export async function DELETE(_: Request, { params }: Params) {
       return sum + BigInt(attachment.mediaSizeBytes);
     }, BigInt(0));
 
-    // 1) Delete Cloudinary assets first
+    // 1) Delete B2 assets first (best-effort, errors are non-fatal)
     for (const attachment of allAttachments) {
-      try {
-        const resourceType = inferCloudinaryResourceType(attachment.type);
-        await cloudinary.uploader.destroy(attachment.mediaPublicId, {
-          resource_type: resourceType,
-        });
-      } catch (cloudinaryError) {
-        console.error("Cloudinary delete error while deleting memory:", cloudinaryError);
-        return Response.json(
-          { error: "Failed to delete one or more attachments from Cloudinary." },
-          { status: 500 }
-        );
-      }
+      await deleteFromB2ByKey(attachment.mediaPublicId);
     }
 
     // 2) Delete memory + adjust storage in one transaction

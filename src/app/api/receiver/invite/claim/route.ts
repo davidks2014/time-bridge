@@ -4,7 +4,7 @@
  * Purpose:
  * - Process a receiver's claim for an invite
  * - Creates a new user account for the receiver
- * - Uploads verification documents to Cloudinary
+ * - Uploads verification documents to B2 storage
  * - Creates an identity verification request for admin review
  * - Records consent for PDPA compliance
  *
@@ -17,7 +17,7 @@
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
-import cloudinary from "@/lib/cloudinary";
+import { uploadToB2 } from "@/lib/b2Storage";
 
 export const dynamic = "force-dynamic";
 
@@ -98,8 +98,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // Upload verification documents to Cloudinary
-    async function uploadToCloudinary(file: File, side: string): Promise<string> {
+    // Upload verification documents to B2
+    async function uploadDocument(file: File, side: string): Promise<string> {
       const allowed = ["image/jpeg", "image/png", "image/webp"];
       if (!allowed.includes(file.type)) {
         throw new Error("Only JPG/PNG/WebP images are allowed.");
@@ -110,33 +110,16 @@ export async function POST(req: Request) {
 
       const bytes = Buffer.from(await file.arrayBuffer());
       const safeName = crypto.randomBytes(8).toString("hex");
+      const fileName = `${identificationNo}_${side}_${Date.now()}_${safeName}`;
 
-      return new Promise<string>((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          {
-            folder: "time-bridge/receiver-verification",
-            resource_type: "image",
-            transformation: [{ width: 1000, crop: "limit" }],
-            public_id: `${identificationNo}_${side}_${Date.now()}_${safeName}`,
-            overwrite: false,
-          },
-          (error, result) => {
-            if (error || !result?.secure_url) {
-              reject(new Error("Cloudinary upload failed."));
-              return;
-            }
-            resolve(result.secure_url);
-          }
-        );
-        stream.end(bytes);
-      });
+      return uploadToB2(bytes, fileName, file.type, "documents");
     }
 
-    const idImageFrontUrl = await uploadToCloudinary(idFront, "front");
+    const idImageFrontUrl = await uploadDocument(idFront, "front");
 
     let idImageBackUrl: string | null = null;
     if (idBack instanceof File && idBack.size > 0) {
-      idImageBackUrl = await uploadToCloudinary(idBack, "back");
+      idImageBackUrl = await uploadDocument(idBack, "back");
     }
 
     // Hash password
@@ -195,7 +178,7 @@ export async function POST(req: Request) {
   } catch (err: any) {
     console.error("POST /api/receiver/invite/claim error:", err);
     const msg = String(err?.message ?? "");
-    if (msg.includes("Only JPG") || msg.includes("Max 5MB") || msg.includes("Cloudinary")) {
+    if (msg.includes("Only JPG") || msg.includes("Max 5MB") || msg.includes("upload")) {
       return Response.json({ error: msg }, { status: 400 });
     }
     return Response.json({ error: "Server error." }, { status: 500 });

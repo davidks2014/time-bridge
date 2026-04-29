@@ -1,7 +1,8 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import cloudinary from "@/lib/cloudinary";
 import { prisma } from "@/lib/prisma";
+import { generatePresignedUploadUrl, getB2Url } from "@/lib/b2Storage";
+import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 
@@ -13,52 +14,34 @@ function normalizeEmail(raw: string): string {
 
 function normalizeItemType(raw: unknown): AllowedItemType {
   const value = String(raw ?? "").trim().toUpperCase();
-
-  if (value === "IMAGE" || value === "VIDEO") {
-    return value as AllowedItemType;
-  }
-
+  if (value === "IMAGE" || value === "VIDEO") return value as AllowedItemType;
   throw new Error("INVALID_ITEM_TYPE");
 }
 
 function getFolderByItemType(itemType: AllowedItemType): string {
   return itemType === "VIDEO"
-    ? "time-bridge/memories/videos"
-    : "time-bridge/memories/images";
-}
-
-function getResourceTypeByItemType(itemType: AllowedItemType): "image" | "video" {
-  return itemType === "VIDEO" ? "video" : "image";
+    ? "memories/videos"
+    : "memories/images";
 }
 
 /**
  * POST /api/media/sign
  *
- * Purpose:
- * - Generate a signed Cloudinary upload signature for direct browser upload
- * - User must be logged in
- * - Return folder, timestamp, api key, cloud name, signature, resource type
+ * Returns a presigned B2 PUT URL for direct browser upload.
  *
- * Request body:
- * {
- *   itemType: "IMAGE" | "VIDEO"
- * }
+ * Request body: { itemType: "IMAGE" | "VIDEO", fileName: string, contentType: string }
+ * Response: { uploadUrl, cdnUrl, key, itemType }
  */
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-
     if (!session?.user?.email) {
       return Response.json({ error: "Not logged in." }, { status: 401 });
     }
 
     const user = await prisma.user.findUnique({
-      where: {
-        email: normalizeEmail(session.user.email),
-      },
-      select: {
-        id: true,
-      },
+      where: { email: normalizeEmail(session.user.email) },
+      select: { id: true },
     });
 
     if (!user) {
@@ -77,32 +60,19 @@ export async function POST(req: Request) {
       );
     }
 
+    const rawFileName = String(body?.fileName ?? "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+    const contentType = String(body?.contentType ?? "application/octet-stream");
     const folder = getFolderByItemType(itemType);
-    const resourceType = getResourceTypeByItemType(itemType);
-    const timestamp = Math.floor(Date.now() / 1000);
+    const uniqueId = crypto.randomBytes(8).toString("hex");
+    const key = `${folder}/${Date.now()}-${uniqueId}-${rawFileName}`;
 
-    /**
-     * These params will be signed.
-     * Keep them aligned with what frontend sends to Cloudinary.
-     */
-    const paramsToSign: Record<string, string | number> = {
-      folder,
-      timestamp,
-    };
-
-    const signature = cloudinary.utils.api_sign_request(
-      paramsToSign,
-      process.env.CLOUDINARY_API_SECRET as string
-    );
+    const uploadUrl = await generatePresignedUploadUrl(key, contentType);
+    const cdnUrl = getB2Url(key);
 
     return Response.json({
-      message: "Upload signature generated successfully.",
-      cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-      apiKey: process.env.CLOUDINARY_API_KEY,
-      timestamp,
-      folder,
-      resourceType,
-      signature,
+      uploadUrl,
+      cdnUrl,
+      key,
       itemType,
     });
   } catch (err) {

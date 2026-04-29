@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import cloudinary from "@/lib/cloudinary";
+import { deleteFromB2ByKey } from "@/lib/b2Storage";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
@@ -41,18 +41,8 @@ function validateAttachmentSize(type: AttachmentType, mediaSizeBytes: bigint) {
   }
 }
 
-function inferCloudinaryResourceType(type: "IMAGE" | "VIDEO"): "image" | "video" {
-  return type === "VIDEO" ? "video" : "image";
-}
-
-async function cleanupCloudinaryUpload(type: AttachmentType, mediaPublicId: string) {
-  try {
-    await cloudinary.uploader.destroy(mediaPublicId, {
-      resource_type: inferCloudinaryResourceType(type),
-    });
-  } catch (cleanupError) {
-    console.error("Cloudinary cleanup error:", cleanupError);
-  }
+async function cleanupB2Upload(mediaPublicId: string) {
+  await deleteFromB2ByKey(mediaPublicId);
 }
 
 /**
@@ -134,7 +124,7 @@ export async function POST(req: Request, { params }: Params) {
       validateAttachmentSize(type, mediaSizeBytes);
     } catch (e) {
       // Best-effort cleanup because direct upload may already exist in Cloudinary
-      await cleanupCloudinaryUpload(type, mediaPublicId);
+      await cleanupB2Upload(mediaPublicId);
 
       if ((e as Error).message === "IMAGE_TOO_LARGE") {
         return Response.json(
@@ -168,14 +158,14 @@ export async function POST(req: Request, { params }: Params) {
 
     if (!item) {
       // Cleanup uploaded file because item is invalid
-      await cleanupCloudinaryUpload(type, mediaPublicId);
+      await cleanupB2Upload(mediaPublicId);
 
       return Response.json({ error: "Item not found." }, { status: 404 });
     }
 
     // 2) Prevent add if item itself already released
     if (item.status === "RELEASED") {
-      await cleanupCloudinaryUpload(type, mediaPublicId);
+      await cleanupB2Upload(mediaPublicId);
 
       return Response.json(
         { error: "This item is already released and cannot accept new attachments." },
@@ -194,7 +184,7 @@ export async function POST(req: Request, { params }: Params) {
     });
 
     if (releasedSibling) {
-      await cleanupCloudinaryUpload(type, mediaPublicId);
+      await cleanupB2Upload(mediaPublicId);
 
       return Response.json(
         {
@@ -211,7 +201,7 @@ export async function POST(req: Request, { params }: Params) {
     const projectedUsedBytes = usedBytes + mediaSizeBytes;
 
     if (projectedUsedBytes > limitBytes) {
-      await cleanupCloudinaryUpload(type, mediaPublicId);
+      await cleanupB2Upload(mediaPublicId);
 
       return Response.json(
         {

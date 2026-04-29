@@ -69,27 +69,12 @@ type UploadedAttachment = {
   mediaSizeBytes: number;
 };
 
-type SignedUploadResponse = {
-  message: string;
-  cloudName: string;
-  apiKey: string;
-  timestamp: number;
-  folder: string;
-  resourceType: "image" | "video";
-  signature: string;
+type B2SignResponse = {
+  uploadUrl: string;
+  cdnUrl: string;
+  key: string;
   itemType: AttachmentType;
-};
-
-type CloudinaryDirectUploadResponse = {
-  secure_url: string;
-  public_id: string;
-  resource_type: string;
-  original_filename?: string;
-  bytes?: number;
-  format?: string;
-  error?: {
-    message?: string;
-  };
+  error?: string;
 };
 
 function splitDateTimeForInput(isoString: string | null): {
@@ -396,63 +381,43 @@ export default function MemoryDetailsPage({
     setNewEditFileError("");
   }
 
-  async function getSignedUpload(itemType: AttachmentType): Promise<SignedUploadResponse> {
-    const res = await fetch("/api/media/sign", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ itemType }),
-    });
-
-    const json = (await res.json()) as SignedUploadResponse & { error?: string };
-
-    if (!res.ok) {
-      throw new Error(json?.error ?? "Failed to get upload signature.");
-    }
-
-    return json;
-  }
-
   async function uploadOneAttachment(file: File): Promise<UploadedAttachment> {
     const attachmentType = inferAttachmentType(file);
 
-    // Step 1: Get signed upload details from backend
-    const signJson = await getSignedUpload(attachmentType);
-
-    // Step 2: Upload directly to Cloudinary from browser
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("api_key", signJson.apiKey);
-    formData.append("timestamp", signJson.timestamp.toString());
-    formData.append("signature", signJson.signature);
-    formData.append("folder", signJson.folder);
-
-    if (signJson.resourceType === "video") {
-      formData.append("resource_type", "video");
-    }
-
-    const uploadUrl = `https://api.cloudinary.com/v1_1/${signJson.cloudName}/${signJson.resourceType}/upload`;
-
-    const uploadRes = await fetch(uploadUrl, {
+    // Step 1: Get presigned B2 upload URL
+    const signRes = await fetch("/api/media/sign", {
       method: "POST",
-      body: formData,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        itemType: attachmentType,
+        fileName: file.name,
+        contentType: file.type,
+      }),
     });
 
-    const uploadJson = (await uploadRes.json()) as CloudinaryDirectUploadResponse;
-
-    if (!uploadRes.ok) {
-      throw new Error(uploadJson?.error?.message ?? "Cloudinary upload failed.");
+    const signJson = (await signRes.json()) as B2SignResponse;
+    if (!signRes.ok) {
+      throw new Error(signJson?.error ?? "Failed to get upload URL.");
     }
 
-    // Step 3: Return standardized object for your existing attachment API
+    // Step 2: PUT file directly to B2 via presigned URL
+    const uploadRes = await fetch(signJson.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+
+    if (!uploadRes.ok) {
+      throw new Error("Upload to storage failed.");
+    }
+
     return {
       type: attachmentType,
-      mediaUrl: String(uploadJson.secure_url),
-      mediaPublicId: String(uploadJson.public_id),
+      mediaUrl: signJson.cdnUrl,
+      mediaPublicId: signJson.key,
       mediaFileName: file.name ?? null,
       mediaMimeType: file.type ?? null,
-      mediaSizeBytes: Number(uploadJson.bytes ?? file.size),
+      mediaSizeBytes: file.size,
     };
   }
 

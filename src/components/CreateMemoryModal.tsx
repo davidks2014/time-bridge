@@ -134,25 +134,33 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
     setError("");
 
     try {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET ?? "ml_default");
+      const itemType: "IMAGE" | "VIDEO" = file.type.startsWith("video/") ? "VIDEO" : "IMAGE";
 
-      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`, {
+      // Step 1: Get presigned B2 upload URL
+      const signRes = await fetch("/api/media/sign", {
         method: "POST",
-        body: form,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          itemType,
+          fileName: file.name,
+          contentType: file.type,
+        }),
       });
+      const signJson = await signRes.json();
+      if (!signRes.ok) throw new Error(signJson?.error ?? "Failed to get upload URL");
 
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error?.message ?? "Upload failed");
-
-      const type: "IMAGE" | "VIDEO" = file.type.startsWith("video/") ? "VIDEO" : "IMAGE";
+      // Step 2: PUT file directly to B2
+      const uploadRes = await fetch(signJson.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!uploadRes.ok) throw new Error("Upload to storage failed");
 
       setAttachments((prev) => [...prev, {
-        type,
-        mediaUrl: json.secure_url,
-        mediaPublicId: json.public_id,
+        type: itemType,
+        mediaUrl: signJson.cdnUrl,
+        mediaPublicId: signJson.key,
         mediaFileName: file.name,
         mediaMimeType: file.type,
       }]);
