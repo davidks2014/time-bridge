@@ -132,12 +132,12 @@ export default function PrivacyPage() {
             </P>
             <ul style={{ paddingLeft: 20, margin: "0 0 12px" }}>
               <Li><strong>Database:</strong> Neon PostgreSQL (ap-southeast-1 region, Singapore)</Li>
-              <Li><strong>Media files</strong> (photos, videos, documents): Cloudinary (Southeast Asia delivery nodes)</Li>
+              <Li><strong>Media files</strong> (photos, videos, documents): Cloudflare R2 (Singapore APAC region, served via cdn.timebridge.sg)</Li>
               <Li><strong>Application hosting:</strong> Vercel (with Asia Pacific edge nodes)</Li>
             </ul>
             <P>
               All data in transit is encrypted using TLS 1.2 or higher. Media files stored on
-              Cloudinary are access-controlled and not publicly accessible without authentication.
+              Cloudflare R2 are served via a private CDN and are not publicly guessable without the exact file key.
             </P>
           </Section>
 
@@ -158,7 +158,7 @@ export default function PrivacyPage() {
               following service providers who process data on our behalf:
             </P>
             <ul style={{ paddingLeft: 20, margin: "0 0 12px" }}>
-              <Li><strong>Cloudinary</strong> — media storage and delivery (photos, videos)</Li>
+              <Li><strong>Cloudflare R2</strong> — media storage and delivery (photos, videos, documents)</Li>
               <Li><strong>Resend</strong> — transactional email delivery</Li>
               <Li><strong>Neon</strong> — managed PostgreSQL database</Li>
               <Li><strong>Vercel</strong> — application hosting and deployment</Li>

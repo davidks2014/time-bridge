@@ -182,7 +182,7 @@ export async function POST(req: Request) {
     } catch (e) {
       const msg = (e as Error).message;
 
-      // Best-effort cleanup if oversized assets were already uploaded directly to Cloudinary
+      // Best-effort cleanup if oversized assets were already uploaded directly to R2
       if (msg === "IMAGE_TOO_LARGE" || msg === "VIDEO_TOO_LARGE") {
         try {
           const rawAttachments = Array.isArray(body?.attachments) ? body.attachments : [];
@@ -436,7 +436,7 @@ export async function POST(req: Request) {
       { status: 201 }
     );
   } catch (err) {
-    // Best-effort cleanup for unexpected failures after direct Cloudinary upload
+    // Best-effort cleanup for unexpected failures after direct R2 upload
     if (parsedAttachmentsForCleanup.length > 0) {
       await cleanupB2Uploads(
         parsedAttachmentsForCleanup.map((attachment) => ({

@@ -124,7 +124,7 @@ export async function POST(req: Request, { params }: Params) {
     try {
       validateAttachmentSize(type, mediaSizeBytes);
     } catch (e) {
-      // Best-effort cleanup because direct upload may already exist in Cloudinary
+      // Best-effort cleanup in case file was already uploaded directly to R2
       await cleanupB2Upload(mediaPublicId);
 
       if ((e as Error).message === "IMAGE_TOO_LARGE") {

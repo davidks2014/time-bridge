@@ -7,7 +7,7 @@
  * - Receiver downloads all their released memories as a single zip
  * - Zip contains one folder per memory collection
  * - Each folder has: message.txt + all image/video attachments
- * - Attachments are fetched from Cloudinary URLs and included
+ * - Attachments are fetched from R2/CDN URLs and included
  *
  * Security:
  * - Must be logged in
@@ -142,7 +142,7 @@ export async function GET() {
           const att = item.attachments[attIndex];
 
           try {
-            // Fetch the attachment from Cloudinary
+            // Fetch the attachment from R2 via CDN
             const response = await fetch(att.mediaUrl);
 
             if (!response.ok) {
