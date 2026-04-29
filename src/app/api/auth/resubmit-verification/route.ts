@@ -1,9 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import path from "path";
-import { promises as fs } from "fs";
-import crypto from "crypto";
+import { uploadToB2 } from "@/lib/b2Storage";
 
 /**
  * API: POST /api/auth/resubmit-verification
@@ -66,30 +64,11 @@ export async function POST(req: Request) {
       if (!allowed.includes(file.type)) {
         throw new Error("Only JPG/PNG/WebP images are allowed.");
       }
-
-      const maxBytes = 5 * 1024 * 1024;
-      if (file.size > maxBytes) {
+      if (file.size > 5 * 1024 * 1024) {
         throw new Error("File too large. Max 5MB.");
       }
-
-      const bytes = Buffer.from(await file.arrayBuffer());
-      const ext =
-        file.type === "image/png"
-          ? "png"
-          : file.type === "image/webp"
-          ? "webp"
-          : "jpg";
-
-      const safeName = crypto.randomBytes(16).toString("hex");
-      const filename = `${Date.now()}_${safeName}.${ext}`;
-
-      const uploadDir = path.join(process.cwd(), "public", "uploads", "verification");
-      await fs.mkdir(uploadDir, { recursive: true });
-
-      const fullPath = path.join(uploadDir, filename);
-      await fs.writeFile(fullPath, bytes);
-
-      return `/uploads/verification/${filename}`;
+      const buf = Buffer.from(await file.arrayBuffer());
+      return uploadToB2(buf, file.name, file.type, "documents");
     }
 
     const verificationDocFrontUrl = await saveUpload(idFront);
