@@ -69,10 +69,8 @@ export async function POST(req: Request) {
         phoneNumber: "",
         identificationNo: "",
         address: "",
-        // Set APPROVED immediately so user can access the dashboard
-        // Identity verification (NRIC, documents) is collected when they
-        // try to create their first memory via the complete-profile flow
-        verificationStatus: "APPROVED",
+        // New users start as PENDING — admin must approve after NRIC verification
+        verificationStatus: "PENDING",
       },
       select: {
         id: true,

@@ -94,7 +94,7 @@ export const authOptions: NextAuthOptions = {
               phoneNumber: "",
               identificationNo: "",
               address: "",
-              verificationStatus: "APPROVED",
+              verificationStatus: "PENDING",
             },
           });
 
