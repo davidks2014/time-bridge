@@ -11,8 +11,9 @@ export default function CompleteProfilePage() {
   const router = useRouter();
 
   const [step, setStep]         = useState(1);
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState("");
+  const [loading, setLoading]           = useState(false);
+  const [submittingMessage, setSubmittingMessage] = useState("");
+  const [error, setError]               = useState("");
 
   // Fields
   const [idNo, setIdNo]         = useState("");
@@ -63,19 +64,39 @@ export default function CompleteProfilePage() {
     setStep((s) => s + 1);
   }
 
+  async function compressImage(file: File): Promise<File> {
+    return new Promise((resolve) => {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d")!;
+      const img = new Image();
+      img.onload = () => {
+        const maxWidth = 1200;
+        const scale = Math.min(1, maxWidth / img.width);
+        canvas.width  = img.width  * scale;
+        canvas.height = img.height * scale;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => {
+          resolve(blob ? new File([blob], file.name, { type: "image/jpeg" }) : file);
+        }, "image/jpeg", 0.8);
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
   async function uploadDocumentToB2(file: File): Promise<string> {
+    const compressed = await compressImage(file);
     const signRes = await fetch("/api/media/sign", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ itemType: "DOCUMENT", fileName: file.name, contentType: file.type }),
+      body: JSON.stringify({ itemType: "DOCUMENT", fileName: compressed.name, contentType: compressed.type }),
     });
     if (!signRes.ok) throw new Error("Failed to get upload URL.");
     const { uploadUrl, cdnUrl } = await signRes.json();
 
     const uploadRes = await fetch(uploadUrl, {
       method: "PUT",
-      headers: { "Content-Type": file.type },
-      body: file,
+      headers: { "Content-Type": compressed.type },
+      body: compressed,
     });
     if (!uploadRes.ok) throw new Error("Failed to upload document to storage.");
 
@@ -89,9 +110,11 @@ export default function CompleteProfilePage() {
 
     setLoading(true);
     try {
+      setSubmittingMessage("Uploading documents securely...");
       const verificationDocFrontUrl = await uploadDocumentToB2(idFront);
       const verificationDocBackUrl  = idBack ? await uploadDocumentToB2(idBack) : null;
 
+      setSubmittingMessage("Saving your profile...");
       const res  = await fetch("/api/auth/complete-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -111,11 +134,13 @@ export default function CompleteProfilePage() {
 
       if (!res.ok) { setError(json?.error ?? "Submission failed. Please try again."); return; }
 
+      setSubmittingMessage("Almost done...");
       router.push("/dashboard");
     } catch (err: any) {
       setError(err?.message ?? "Network error. Please try again.");
     } finally {
       setLoading(false);
+      setSubmittingMessage("");
     }
   }
 
@@ -447,7 +472,7 @@ export default function CompleteProfilePage() {
                 disabled={loading || !allConsents}
                 style={{ flex: 2, fontSize: 12, letterSpacing: "1px" }}
               >
-                {loading ? "Submitting..." : "Submit for verification"}
+                {loading ? (submittingMessage || "Submitting...") : "Submit for verification"}
               </button>
             )}
           </div>
