@@ -2,7 +2,7 @@
  * API: DELETE /api/memory-sent/[memoryId]/attachments/[attachmentId]
  *
  * Purpose: Delete a single attachment from a memory item.
- * Deletes the file from Backblaze B2, then removes the DB record,
+ * Deletes the file from Cloudflare R2, then removes the DB record,
  * then decrements the owner's storage usage (storageUsedMB).
  *
  * Query params:
@@ -91,7 +91,7 @@ export async function DELETE(req: Request, { params }: Params) {
       select: {
         id: true,
         type: true,
-        mediaPublicId: true, // B2 object key
+        mediaPublicId: true, // R2 object key
         mediaSizeMB: true,   // needed for storage decrement
       },
     });
@@ -100,7 +100,7 @@ export async function DELETE(req: Request, { params }: Params) {
       return Response.json({ error: "Attachment not found." }, { status: 404 });
     }
 
-    // 4) Delete file from Backblaze B2 using the stored object key
+    // 4) Delete file from Cloudflare R2 using the stored object key
     await deleteFromB2ByKey(attachment.mediaPublicId);
 
     // 5) Delete attachment record from DB

@@ -135,8 +135,8 @@ export async function GET(_: Request, { params }: Params) {
  *
  * Purpose: Delete an entire memory and all its attachments.
  * 1. Block if any item is already RELEASED
- * 2. Fetch all attachments with B2 keys and sizes
- * 3. Delete each file from B2 (best-effort, non-fatal)
+ * 2. Fetch all attachments with R2 keys and sizes
+ * 3. Delete each file from R2 (best-effort, non-fatal)
  * 4. Delete memory from DB (cascade deletes items + attachments)
  * 5. Decrement user storage by total MB of deleted files
  */
