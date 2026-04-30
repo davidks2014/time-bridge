@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       return Response.json({ error: "sizeMB must be greater than 0." }, { status: 400 });
     }
 
-    await incrementStorage(user.id, sizeMB);
+    await incrementStorage(user.id, Math.round(sizeMB * 1024 * 1024));
 
     return Response.json({ message: "Storage updated." });
   } catch (err) {

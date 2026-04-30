@@ -168,8 +168,8 @@ export async function DELETE(_: Request, { params }: Params) {
             status: true,
             attachments: {
               select: {
-                mediaPublicId: true, // B2 object key for deletion
-                mediaSizeMB: true,   // size for storage decrement
+                mediaPublicId: true,  // R2 object key for deletion
+                mediaSizeBytes: true, // size for storage decrement
               },
             },
           },
@@ -197,23 +197,23 @@ export async function DELETE(_: Request, { params }: Params) {
 
     const allAttachments = memory.items.flatMap((item) => item.attachments ?? []);
 
-    // Delete all attachment files from B2 (log errors but don't block deletion)
-    let totalSizeMB = 0;
+    // Delete all attachment files from R2 (log errors but don't block deletion)
+    let totalSizeBytes = 0;
     for (const att of allAttachments) {
       try {
         await deleteFromB2ByKey(att.mediaPublicId);
-        totalSizeMB += att.mediaSizeMB;
-      } catch (b2Err) {
-        console.error("B2 delete error for key:", att.mediaPublicId, b2Err);
+        totalSizeBytes += Number(att.mediaSizeBytes);
+      } catch (r2Err) {
+        console.error("R2 delete error for key:", att.mediaPublicId, r2Err);
       }
     }
 
     // Delete memory from DB (cascade deletes items + attachments)
     await prisma.memoryCollection.delete({ where: { id: memory.id } });
 
-    // Decrement user storage by total size of deleted files
-    if (totalSizeMB > 0) {
-      await decrementStorage(user.id, totalSizeMB);
+    // Decrement user storage by total bytes of deleted files
+    if (totalSizeBytes > 0) {
+      await decrementStorage(user.id, totalSizeBytes);
     }
 
     return Response.json({

@@ -85,14 +85,14 @@ export async function DELETE(req: Request, { params }: Params) {
       return Response.json({ error: "Item not found in this memory." }, { status: 404 });
     }
 
-    // 3) Find attachment — select mediaSizeMB for storage decrement
+    // 3) Find attachment — select mediaSizeBytes for storage decrement
     const attachment = await prisma.memoryAttachment.findFirst({
       where: { id: attachmentId, itemId },
       select: {
         id: true,
         type: true,
-        mediaPublicId: true, // R2 object key
-        mediaSizeMB: true,   // needed for storage decrement
+        mediaPublicId: true,  // R2 object key
+        mediaSizeBytes: true, // needed for storage decrement
       },
     });
 
@@ -107,7 +107,7 @@ export async function DELETE(req: Request, { params }: Params) {
     await prisma.memoryAttachment.delete({ where: { id: attachment.id } });
 
     // 6) Decrement user storage by the size of the deleted file
-    await decrementStorage(user.id, attachment.mediaSizeMB);
+    await decrementStorage(user.id, Number(attachment.mediaSizeBytes));
 
     return Response.json({
       message: "Attachment deleted successfully.",
