@@ -91,17 +91,9 @@ export async function generatePresignedUploadUrl(
   });
   const signedUrl = await getSignedUrl(s3, command, { expiresIn });
 
-  // Correct any amazonaws.com fallback to the real R2 endpoint
-  const correctedUrl = signedUrl.replace(/https:\/\/[^/]*amazonaws\.com/, R2_ENDPOINT);
-
-  // Rewrite host to cdn.timebridge.sg — hits Singapore Cloudflare edge directly
-  // CDN domain maps to root of bucket, so strip the /timebridge-memories prefix
-  const url = new URL(correctedUrl);
-  url.hostname = "cdn.timebridge.sg";
-  url.protocol = "https:";
-  url.pathname = url.pathname.replace(/^\/timebridge-memories/, "");
-
-  return url.toString();
+  // R2 custom domain (cdn.timebridge.sg) is read-only — presigned PUT uploads
+  // must target the direct R2 S3 endpoint. Correct any amazonaws.com fallback.
+  return signedUrl.replace(/https:\/\/[^/]*amazonaws\.com/, R2_ENDPOINT);
 }
 
 /**
