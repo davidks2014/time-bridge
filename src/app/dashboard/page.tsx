@@ -239,7 +239,7 @@ export default function DashboardPage() {
         )}
 
         {/* ── Proof of life banner ── */}
-        <div className="tb-fade-in tb-stagger-2" style={{
+        {memories.length > 0 && <div className="tb-fade-in tb-stagger-2" style={{
           background: proofInfo.bg,
           border: `1px solid ${proofInfo.border}`,
           borderRadius: "var(--radius-md)",
@@ -266,7 +266,7 @@ export default function DashboardPage() {
               {confirming ? "Confirming..." : "I am here ✓"}
             </button>
           )}
-        </div>
+        </div>}
 
         {/* ── Storage warning banner (danger: full) ── */}
         {stats && storagePct >= 100 && (
@@ -338,7 +338,7 @@ export default function DashboardPage() {
         )}
 
         {/* ── Stats ── */}
-        {stats && (
+        {memories.length > 0 && stats && (
           <div className="tb-fade-in tb-stagger-3" style={{
             display: "grid",
             gridTemplateColumns: "repeat(3, 1fr)",
@@ -418,31 +418,14 @@ export default function DashboardPage() {
             <div className="tb-fade-in" style={{ maxWidth: 560, margin: "0 auto", padding: "40px 0" }}>
               {wizardStep === 1 ? (
                 <>
-                  {/* Envelope icon */}
-                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
-                    <div style={{ position: "relative", width: 72, height: 72, borderRadius: 16, background: "#2C1810", overflow: "hidden" }}>
-                      <div style={{ position: "absolute", top: 0, left: 0, width: 0, height: 0, borderLeft: "36px solid transparent", borderRight: "36px solid transparent", borderTop: "26px solid #B8965A" }} />
-                      <div style={{ position: "absolute", bottom: 0, left: 0, width: 0, height: 0, borderLeft: "36px solid transparent", borderRight: "36px solid transparent", borderBottom: "20px solid rgba(184,150,90,0.35)" }} />
-                    </div>
-                  </div>
-
-                  {/* Greeting */}
-                  <div style={{ textAlign: "center", marginBottom: 36 }}>
-                    <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 34, fontWeight: 400, color: "#2C1810", lineHeight: 1.2 }}>
-                      Good {timeOfDay}, {firstName}.
-                    </div>
-                    <div style={{ fontFamily: "Lato, sans-serif", fontSize: 15, fontWeight: 300, color: "#888", marginTop: 8 }}>
-                      The people you love deserve to receive your words.
-                    </div>
-                  </div>
-
                   {/* Section label */}
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "#B8965A", textTransform: "uppercase", marginBottom: 16 }}>
                     What brings you here?
                   </div>
 
                   {/* Cards */}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 24 }}>
+                  <style>{`@media(max-width:600px){.tb-wizard-cards{grid-template-columns:1fr!important}}`}</style>
+                  <div className="tb-wizard-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 24 }}>
                     {([
                       { key: "planner" as const, icon: "🛡️", title: "Plan for my family",      body: "Make sure they know everything I have prepared — policies, assets, and my final words" },
                       { key: "parent"  as const, icon: "💌", title: "Messages for my child",    body: "Deliver my love at the right moment — their 18th birthday, graduation, or wedding day" },
