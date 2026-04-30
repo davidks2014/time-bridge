@@ -19,14 +19,16 @@ export default function UpgradePage() {
   const [currentPlan, setCurrentPlan] = useState<"free" | "plus" | "premium">("free");
 
   useEffect(() => {
-    fetch("/api/profile")
-      .then((r) => r.json())
-      .then((json) => {
+    async function loadPlan() {
+      try {
+        const r = await fetch("/api/profile");
+        const json = await r.json();
         const name = json.profile?.stripePlanName;
         if (name === "plus" || name === "premium") setCurrentPlan(name);
         else setCurrentPlan("free");
-      })
-      .catch(() => {});
+      } catch {}
+    }
+    loadPlan();
   }, []);
 
   async function handleUpgrade(priceId: string, planKey: string) {
