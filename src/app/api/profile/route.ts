@@ -35,6 +35,8 @@ export async function GET() {
         trustedContactEmail: true,
         trustedContactPhone: true,
         snoozedUntil: true,
+        storageUsedMB: true,
+        storageLimitMB: true,
       },
     });
 

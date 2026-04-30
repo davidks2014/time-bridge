@@ -21,6 +21,8 @@ type ProfileData = {
   trustedContactPhone: string;
   trustedContactNric: string;
   trustedContactAddress: string;
+  storageUsedMB: number;
+  storageLimitMB: number;
 };
 
 type Tab = "account" | "trusted" | "privacy";
@@ -200,6 +202,10 @@ export default function ProfilePage() {
     : profile?.proofOfLifeStage === "WARNING" ? "var(--gold)"
     : "var(--sage)";
 
+  const storageUsedMB  = profile?.storageUsedMB  ?? 0;
+  const storageLimitMB = profile?.storageLimitMB ?? 1024;
+  const storagePct     = Math.min((storageUsedMB / storageLimitMB) * 100, 100);
+
   return (
     <div className="tb-page tb-page-with-tabs">
       <div className="tb-container" style={{ paddingTop: 32, paddingBottom: 48 }}>
@@ -269,6 +275,44 @@ export default function ProfilePage() {
         {/* ── Tab: Account ── */}
         {activeTab === "account" && (
           <div className="tb-fade-in">
+
+            {/* Storage usage */}
+            <div style={{
+              padding: "16px 20px",
+              background: "#FAF7F2",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              marginBottom: 24,
+            }}>
+              <div className="tb-section-label" style={{ marginBottom: 10 }}>Storage</div>
+              <div style={{
+                height: 8,
+                background: "var(--cream)",
+                borderRadius: 9999,
+                overflow: "hidden",
+                marginBottom: 8,
+              }}>
+                <div style={{
+                  height: "100%",
+                  width: `${storagePct}%`,
+                  background: storagePct >= 100 ? "#DC2626" : "#B8965A",
+                  borderRadius: 9999,
+                }} />
+              </div>
+              <div style={{ fontSize: 11, color: "var(--earth-muted)" }}>
+                {storageUsedMB.toFixed(2)} MB used of {storageLimitMB} MB
+              </div>
+              {storagePct >= 100 && (
+                <div style={{ fontSize: 12, color: "#DC2626", marginTop: 6, fontWeight: 600 }}>
+                  Storage full. Please delete files or upgrade your plan.
+                </div>
+              )}
+              {storagePct >= 80 && storagePct < 100 && (
+                <div style={{ fontSize: 12, color: "#D97706", marginTop: 6, fontWeight: 600 }}>
+                  You are running low on storage. Consider upgrading your plan.
+                </div>
+              )}
+            </div>
 
             {/* Proof of life status */}
             <div style={{
