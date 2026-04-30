@@ -293,7 +293,7 @@ model User {
   // Storage Tracking
   // =========================================
   storageUsedMB  Float @default(0)
-  storageLimitMB Float @default(1024)
+  storageLimitMB Float @default(500)
 
   // =========================================
   // Timestamps
