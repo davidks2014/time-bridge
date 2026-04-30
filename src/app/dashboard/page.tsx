@@ -415,55 +415,117 @@ export default function DashboardPage() {
 
         {memories.length === 0 ? (
           stats ? (
-            <div className="tb-fade-in" style={{ maxWidth: 860, margin: "0 auto", padding: "60px 0" }}>
+            <div className="tb-fade-in" style={{ maxWidth: 860, margin: "0 auto", padding: "32px 0" }}>
               {wizardStep === 1 ? (
                 <>
+                  {/* Greeting */}
+                  <div style={{ textAlign: "center", marginBottom: 8 }}>
+                    <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 40, fontWeight: 300, color: "#2C1810", lineHeight: 1.2 }}>
+                      Good {timeOfDay}, <em>{firstName}.</em>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, letterSpacing: "0.16em", color: "#B8965A", textAlign: "center", marginBottom: 6, fontWeight: 400 }}>
+                    YOUR LEGACY IS SAFELY HELD
+                  </div>
+                  <div style={{ width: 36, height: 1, background: "#B8965A", margin: "0 auto 40px", opacity: 0.4 }} />
+
                   {/* Section label */}
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "#B8965A", textTransform: "uppercase", marginBottom: 16 }}>
-                    What brings you here?
+                  <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A", textAlign: "center", marginBottom: 24, opacity: 0.85 }}>
+                    WHAT BRINGS YOU TO TIME BRIDGE?
                   </div>
 
                   {/* Cards */}
-                  <style>{`@media(max-width:600px){.tb-wizard-cards{grid-template-columns:1fr!important}}`}</style>
-                  <div className="tb-wizard-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, marginBottom: 24 }}>
+                  <style>{`
+                    .tb-wizard-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+                    @media (max-width: 600px) { .tb-wizard-cards { grid-template-columns: 1fr !important; } }
+                    .tb-wcard { background: #fff; border: 1px solid rgba(184,150,90,0.2); border-radius: 20px; padding: 36px 24px 28px; display: flex; flex-direction: column; align-items: center; text-align: center; cursor: pointer; transition: border-color 220ms ease, background 220ms ease, transform 180ms ease; position: relative; overflow: hidden; }
+                    .tb-wcard:hover { transform: translateY(-3px); border-color: rgba(184,150,90,0.5); }
+                    .tb-wcard.sel-gold { background: #FAF7F2; border: 1.5px solid #B8965A; }
+                    .tb-wcard.sel-sage { background: #FAF7F2; border: 1.5px solid #7C9A7E; }
+                  `}</style>
+
+                  <div className="tb-wizard-cards">
                     {([
-                      { key: "planner" as const, icon: "🛡️", title: "Plan for my family",      body: "Make sure they know everything I have prepared — policies, assets, and my final words" },
-                      { key: "parent"  as const, icon: "💌", title: "Messages for my child",    body: "Deliver my love at the right moment — their 18th birthday, graduation, or wedding day" },
-                      { key: "keeper"  as const, icon: "📸", title: "Capture a moment",         body: "Preserve memories and share them with the people I love" },
+                      {
+                        key: "planner" as const,
+                        num: "01",
+                        accentColor: "#B8965A",
+                        iconBg: "rgba(184,150,90,0.1)",
+                        selClass: "sel-gold",
+                        title: "Protect my family",
+                        body: "Make sure they know everything I have prepared — my insurance, assets, and the words I want them to receive.",
+                        icon: (
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#B8965A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                          </svg>
+                        ),
+                      },
+                      {
+                        key: "parent" as const,
+                        num: "02",
+                        accentColor: "#7C9A7E",
+                        iconBg: "rgba(124,154,126,0.1)",
+                        selClass: "sel-sage",
+                        title: "A letter to my child",
+                        body: "Deliver my love at exactly the right moment — their 18th birthday, graduation day, or wedding.",
+                        icon: (
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7C9A7E" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                          </svg>
+                        ),
+                      },
+                      {
+                        key: "keeper" as const,
+                        num: "03",
+                        accentColor: "#B8965A",
+                        iconBg: "rgba(184,150,90,0.1)",
+                        selClass: "sel-gold",
+                        title: "Capture a moment",
+                        body: "Preserve the memories that matter and share them with the people I love, now or in the future.",
+                        icon: (
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#B8965A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                            <circle cx="12" cy="13" r="4"/>
+                          </svg>
+                        ),
+                      },
                     ] as const).map((card) => {
                       const selected = wizardSelection === card.key;
                       return (
                         <div
                           key={card.key}
+                          className={`tb-wcard${selected ? ` ${card.selClass}` : ""}`}
                           onClick={() => setWizardSelection(card.key)}
-                          style={{
-                            background: selected ? "#FAF7F2" : "#fff",
-                            border: `${selected ? "2px" : "1.5px"} solid ${selected ? "#B8965A" : "#E8D5B7"}`,
-                            borderRadius: 16,
-                            padding: "32px 28px",
-                            cursor: "pointer",
-                            transition: "border-color 200ms ease, background 200ms ease",
-                            display: "flex",
-                            flexDirection: "column",
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!selected) { e.currentTarget.style.borderColor = "#B8965A"; e.currentTarget.style.background = "#FDFAF5"; }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!selected) { e.currentTarget.style.borderColor = "#E8D5B7"; e.currentTarget.style.background = "#fff"; }
-                          }}
                         >
-                          <div style={{ width: 48, height: 48, borderRadius: 12, background: selected ? "#2C1810" : "#F5EEE6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>
+                          {/* Top accent bar */}
+                          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, borderRadius: "20px 20px 0 0", background: card.accentColor, opacity: selected ? 1 : 0, transition: "opacity 220ms" }} />
+
+                          {/* Icon */}
+                          <div style={{ width: 56, height: 56, borderRadius: 16, background: selected ? "#2C1810" : card.iconBg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18, transition: "background 220ms", flexShrink: 0 }}>
                             {card.icon}
                           </div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: "#2C1810", marginTop: 14, fontFamily: "var(--font-body)" }}>
+
+                          {/* Number */}
+                          <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.16em", color: selected ? card.accentColor : "rgba(184,150,90,0.4)", marginBottom: 10, transition: "color 220ms" }}>
+                            {card.num}
+                          </div>
+
+                          {/* Title */}
+                          <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 22, fontWeight: 600, color: "#2C1810", lineHeight: 1.2, marginBottom: 12 }}>
                             {card.title}
                           </div>
-                          <div style={{ fontSize: 13, color: "#888", lineHeight: 1.6, marginTop: 6, flex: 1 }}>
+
+                          {/* Body */}
+                          <div style={{ fontSize: 13, color: "#9A8878", lineHeight: 1.85, flex: 1 }}>
                             {card.body}
                           </div>
-                          <div style={{ marginTop: 14 }}>
-                            <div style={{ width: 20, height: 20, borderRadius: "50%", background: selected ? "#B8965A" : "transparent", border: `2px solid ${selected ? "#B8965A" : "#E8D5B7"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+
+                          {/* Footer */}
+                          <div style={{ marginTop: 24, paddingTop: 18, borderTop: "1px solid rgba(184,150,90,0.12)", width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                            <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.12em", color: card.accentColor, opacity: selected ? 1 : 0, transition: "opacity 220ms" }}>
+                              SELECTED
+                            </div>
+                            <div style={{ width: 22, height: 22, borderRadius: "50%", background: selected ? card.accentColor : "transparent", border: `1.5px solid ${selected ? card.accentColor : "rgba(184,150,90,0.3)"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 220ms" }}>
                               {selected && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff" }} />}
                             </div>
                           </div>
@@ -472,37 +534,35 @@ export default function DashboardPage() {
                     })}
                   </div>
 
-                  {/* CTA button — always visible, disabled until selection */}
-                  <button
-                    onClick={() => { if (wizardSelection) setWizardStep(2); }}
-                    disabled={!wizardSelection}
-                    style={{
-                      width: "100%",
-                      background: "#2C1810",
-                      color: "#FAF7F2",
-                      border: "none",
-                      borderRadius: 10,
-                      padding: "16px",
-                      fontSize: 15,
-                      fontWeight: 700,
-                      cursor: wizardSelection ? "pointer" : "not-allowed",
-                      letterSpacing: "0.04em",
-                      opacity: wizardSelection ? 1 : 0.4,
-                      transition: "opacity 200ms ease",
-                      fontFamily: "var(--font-body)",
-                    }}
-                    onMouseEnter={(e) => { if (wizardSelection) e.currentTarget.style.opacity = "0.85"; }}
-                    onMouseLeave={(e) => { if (wizardSelection) e.currentTarget.style.opacity = "1"; }}
-                    onMouseDown={(e) => { if (wizardSelection) e.currentTarget.style.transform = "scale(0.99)"; }}
-                    onMouseUp={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
-                  >
-                    {wizardSelection
-                      ? `Begin — ${{ planner: "Plan for my family", parent: "Messages for my child", keeper: "Capture a moment" }[wizardSelection]} →`
-                      : "Choose how to begin"}
-                  </button>
-
-                  <div style={{ textAlign: "center", marginTop: 10, fontSize: 11, color: "#B8965A" }}>
-                    You can always create different memories later
+                  {/* CTA button */}
+                  <div style={{ marginTop: 32, textAlign: "center" }}>
+                    <button
+                      onClick={() => { if (wizardSelection) setWizardStep(2); }}
+                      disabled={!wizardSelection}
+                      style={{
+                        background: "#2C1810",
+                        color: "#FAF7F2",
+                        border: "none",
+                        borderRadius: 12,
+                        padding: "17px 0",
+                        fontSize: 14,
+                        fontWeight: 700,
+                        letterSpacing: "0.06em",
+                        cursor: wizardSelection ? "pointer" : "not-allowed",
+                        width: "100%",
+                        maxWidth: 440,
+                        opacity: wizardSelection ? 1 : 0.35,
+                        transition: "opacity 200ms ease",
+                        fontFamily: "Lato, sans-serif",
+                      }}
+                    >
+                      {wizardSelection
+                        ? `Begin — ${{ planner: "Protect my family", parent: "A letter to my child", keeper: "Capture a moment" }[wizardSelection]} →`
+                        : "Choose how to begin"}
+                    </button>
+                    <div style={{ marginTop: 12, fontSize: 11, color: "rgba(184,150,90,0.65)", letterSpacing: "0.04em" }}>
+                      You can always create different memories later
+                    </div>
                   </div>
                 </>
               ) : (
@@ -521,9 +581,9 @@ export default function DashboardPage() {
                         cta: "Create my family's safety net →",
                       },
                       parent: {
-                        heading: "Let's capture your love",
+                        heading: "A letter to your child",
                         body: "Create your first milestone memory. Choose a moment in your child's future and write the words you want them to receive — on their birthday, graduation, or wedding day.",
-                        cta: "Write my first milestone message →",
+                        cta: "Write my first letter →",
                       },
                       keeper: {
                         heading: "Let's preserve a moment",
