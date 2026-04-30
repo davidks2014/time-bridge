@@ -11,8 +11,9 @@ import { parseSingaporeDateTimeInput } from "@/lib/sg-time";
 
 export const dynamic = "force-dynamic";
 
-const MAX_IMAGE_BYTES = BigInt(10 * 1024 * 1024); // 10MB
-const MAX_VIDEO_BYTES = BigInt(200 * 1024 * 1024); // 200MB
+// File size limits in MB
+const MAX_IMAGE_MB = 10;
+const MAX_VIDEO_MB = 200;
 
 function normalizeIdentificationNo(raw: string): string {
   return String(raw ?? "")
@@ -43,13 +44,17 @@ function normalizeAttachmentType(raw: unknown): AttachmentType {
   throw new Error("INVALID_ATTACHMENT_TYPE");
 }
 
-
-function validateAttachmentSize(type: AttachmentType, mediaSizeBytes: bigint) {
-  if (type === "IMAGE" && mediaSizeBytes > MAX_IMAGE_BYTES) {
+/**
+ * Validate that the attachment does not exceed the per-type size limit.
+ * @param type       - IMAGE or VIDEO
+ * @param mediaSizeMB - File size in MB (Float)
+ */
+function validateAttachmentSize(type: AttachmentType, mediaSizeMB: number) {
+  if (type === "IMAGE" && mediaSizeMB > MAX_IMAGE_MB) {
     throw new Error("IMAGE_TOO_LARGE");
   }
 
-  if (type === "VIDEO" && mediaSizeBytes > MAX_VIDEO_BYTES) {
+  if (type === "VIDEO" && mediaSizeMB > MAX_VIDEO_MB) {
     throw new Error("VIDEO_TOO_LARGE");
   }
 }
@@ -60,9 +65,13 @@ type IncomingAttachment = {
   mediaPublicId: string;
   mediaFileName: string | null;
   mediaMimeType: string | null;
-  mediaSizeBytes: bigint;
+  mediaSizeMB: number; // size in MB (Float)
 };
 
+/**
+ * Parse and validate the attachments array from the request body.
+ * Accepts mediaSizeMB directly; falls back to converting bytes if only bytes are provided.
+ */
 function parseAttachments(raw: unknown): IncomingAttachment[] {
   if (raw == null) return [];
 
@@ -77,13 +86,10 @@ function parseAttachments(raw: unknown): IncomingAttachment[] {
     const mediaFileName = String((item as any)?.mediaFileName ?? "").trim() || null;
     const mediaMimeType = String((item as any)?.mediaMimeType ?? "").trim() || null;
 
-    const rawSize =
-      (item as any)?.mediaSizeBytes ??
-      (item as any)?.bytes ??
-      (item as any)?.originalFileSize ??
-      0;
-
-    const mediaSizeBytes = BigInt(Number(rawSize) || 0);
+    // Use mediaSizeMB directly if provided; otherwise convert from bytes
+    const rawMB = Number((item as any)?.mediaSizeMB ?? 0);
+    const rawBytes = Number((item as any)?.mediaSizeBytes ?? (item as any)?.bytes ?? 0);
+    const mediaSizeMB = rawMB > 0 ? rawMB : rawBytes / (1024 * 1024);
 
     if (!mediaUrl) {
       throw new Error("ATTACHMENT_MEDIA_URL_REQUIRED");
@@ -93,11 +99,11 @@ function parseAttachments(raw: unknown): IncomingAttachment[] {
       throw new Error("ATTACHMENT_MEDIA_PUBLIC_ID_REQUIRED");
     }
 
-    if (mediaSizeBytes <= BigInt(0)) {
+    if (mediaSizeMB <= 0) {
       throw new Error("ATTACHMENT_MEDIA_SIZE_REQUIRED");
     }
 
-    validateAttachmentSize(type, mediaSizeBytes);
+    validateAttachmentSize(type, mediaSizeMB);
 
     return {
       type,
@@ -105,7 +111,7 @@ function parseAttachments(raw: unknown): IncomingAttachment[] {
       mediaPublicId,
       mediaFileName,
       mediaMimeType,
-      mediaSizeBytes,
+      mediaSizeMB,
     };
   });
 }
@@ -132,8 +138,8 @@ export async function POST(req: Request) {
       select: {
         id: true,
         email: true,
-        storageUsedBytes: true,
-        storageLimitBytes: true,
+        storageUsedMB: true,
+        storageLimitMB: true,
         identificationNo: true,
         phoneNumber: true,
         address: true,
@@ -146,7 +152,6 @@ export async function POST(req: Request) {
     }
 
     // Block memory creation if profile is incomplete
-    // User must have NRIC, phone, and address filled in
     if (!me.identificationNo || !me.phoneNumber || !me.address) {
       return Response.json(
         {
@@ -158,7 +163,6 @@ export async function POST(req: Request) {
     }
 
     // Block memory creation if not yet approved by admin
-    // Covers PENDING and REJECTED statuses
     if (me.verificationStatus !== "APPROVED") {
       return Response.json(
         {
@@ -237,7 +241,7 @@ export async function POST(req: Request) {
 
       if (msg === "ATTACHMENT_MEDIA_SIZE_REQUIRED") {
         return Response.json(
-          { error: "Each attachment requires mediaSizeBytes greater than 0." },
+          { error: "Each attachment requires a file size greater than 0." },
           { status: 400 }
         );
       }
@@ -302,8 +306,7 @@ export async function POST(req: Request) {
       if ((e as Error).message === "INVALID_RELEASE_DATE") {
         return Response.json(
           {
-            error:
-              "Invalid releaseDate. Please choose a valid Singapore date and time.",
+            error: "Invalid releaseDate. Please choose a valid Singapore date and time.",
           },
           { status: 400 }
         );
@@ -311,22 +314,16 @@ export async function POST(req: Request) {
       throw e;
     }
 
-    const totalAttachmentBytes = attachments.reduce(
-      (sum, attachment) => sum + attachment.mediaSizeBytes,
-      BigInt(0)
-    );
+    // Quota check — all values in MB (Float)
+    const totalAttachmentMB = attachments.reduce((sum, a) => sum + a.mediaSizeMB, 0);
+    const currentUsedMB = me.storageUsedMB;
+    const limitMB = me.storageLimitMB;
+    const projectedUsedMB = currentUsedMB + totalAttachmentMB;
 
-    const currentUsedBytes = BigInt(me.storageUsedBytes);
-    const limitBytes = BigInt(me.storageLimitBytes);
-    const projectedUsedBytes = currentUsedBytes + totalAttachmentBytes;
-
-    if (projectedUsedBytes > limitBytes) {
+    if (projectedUsedMB > limitMB) {
       if (attachments.length > 0) {
         await cleanupB2Uploads(
-          attachments.map((attachment) => ({
-            type: attachment.type,
-            mediaPublicId: attachment.mediaPublicId,
-          }))
+          attachments.map((a) => ({ mediaPublicId: a.mediaPublicId }))
         );
       }
 
@@ -334,11 +331,11 @@ export async function POST(req: Request) {
         {
           error: "Storage quota exceeded. Please delete some files or upgrade your plan.",
           storage: {
-            usedBytes: currentUsedBytes.toString(),
-            limitBytes: limitBytes.toString(),
-            incomingFileBytes: totalAttachmentBytes.toString(),
-            projectedUsedBytes: projectedUsedBytes.toString(),
-            remainingBytes: (limitBytes > currentUsedBytes ? limitBytes - currentUsedBytes : BigInt(0)).toString(),
+            usedMB: currentUsedMB,
+            limitMB,
+            incomingMB: totalAttachmentMB,
+            projectedMB: projectedUsedMB,
+            remainingMB: Math.max(0, limitMB - currentUsedMB),
           },
         },
         { status: 400 }
@@ -406,7 +403,7 @@ export async function POST(req: Request) {
                   mediaPublicId: att.mediaPublicId,
                   mediaFileName: att.mediaFileName ?? null,
                   mediaMimeType: att.mediaMimeType ?? null,
-                  mediaSizeBytes: att.mediaSizeBytes,
+                  mediaSizeMB: att.mediaSizeMB,
                 })),
               },
             },
@@ -418,18 +415,17 @@ export async function POST(req: Request) {
       createdCollections.push(collection);
     }
 
-    // Update storage usage once for the shared attachments
+    // Increment storage usage once for the shared attachments (MB)
     if (attachments.length > 0) {
       await prisma.user.update({
         where: { id: me.id },
-        data: { storageUsedBytes: { increment: totalAttachmentBytes } },
+        data: { storageUsedMB: { increment: totalAttachmentMB } },
       });
     }
 
     return Response.json(
       {
         message: `Memory created for ${createdCollections.length} receiver(s).`,
-        // Return first collection ID for redirect (backwards compatible)
         memoryId: createdCollections[0]?.id,
         collections: createdCollections.map((c) => ({ id: c.id })),
       },
@@ -439,10 +435,7 @@ export async function POST(req: Request) {
     // Best-effort cleanup for unexpected failures after direct R2 upload
     if (parsedAttachmentsForCleanup.length > 0) {
       await cleanupB2Uploads(
-        parsedAttachmentsForCleanup.map((attachment) => ({
-          type: attachment.type,
-          mediaPublicId: attachment.mediaPublicId,
-        }))
+        parsedAttachmentsForCleanup.map((a) => ({ mediaPublicId: a.mediaPublicId }))
       );
     }
 

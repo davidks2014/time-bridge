@@ -5,57 +5,58 @@
  * Called after every file upload (increment) and
  * after every file delete (decrement).
  *
- * Storage is tracked in bytes in the User table:
- * - storageUsedBytes: how much the user has used
- * - storageLimitBytes: their allowed limit
+ * Storage is tracked in MB in the User table:
+ * - storageUsedMB: how much the user has used (Float)
+ * - storageLimitMB: their allowed limit (Float, default 1024 MB = 1 GB)
  */
 
 import { prisma } from "@/lib/prisma";
 
 /**
- * Add to user's storage usage after successful upload.
- * @param userId    - User's database ID
- * @param sizeBytes - File size in bytes to add
+ * Add to user's storage usage after a successful upload.
+ * Uses Prisma's { increment } — safe for additive updates.
+ * @param userId - User's database ID
+ * @param sizeMB - File size in megabytes to add (Float)
  */
 export async function incrementStorage(
   userId: string,
-  sizeBytes: number
+  sizeMB: number
 ): Promise<void> {
   await prisma.user.update({
     where: { id: userId },
-    data: { storageUsedBytes: { increment: BigInt(sizeBytes) } },
+    data: { storageUsedMB: { increment: sizeMB } },
   });
 }
 
 /**
- * Subtract from user's storage usage after file delete.
- * Uses raw SQL to prevent negative values — Prisma's decrement
- * can go below zero if the stored value is already 0.
- * @param userId    - User's database ID
- * @param sizeBytes - File size in bytes to subtract
+ * Subtract from user's storage usage after a file delete.
+ * Uses raw SQL with GREATEST(0, ...) to prevent the value going below zero —
+ * Prisma's { decrement } can push a Float negative if the field is already 0.
+ * @param userId - User's database ID
+ * @param sizeMB - File size in megabytes to subtract (Float)
  */
 export async function decrementStorage(
   userId: string,
-  sizeBytes: number
+  sizeMB: number
 ): Promise<void> {
   await prisma.$executeRaw`
     UPDATE "User"
-    SET "storageUsedBytes" = GREATEST(0, "storageUsedBytes" - ${BigInt(sizeBytes)})
+    SET "storageUsedMB" = GREATEST(0, "storageUsedMB" - ${sizeMB})
     WHERE id = ${userId}
   `;
 }
 
 /**
- * Get user's current storage usage and limit.
+ * Get user's current storage usage and limit in MB.
  * @param userId - User's database ID
- * @returns { storageUsedBytes, storageLimitBytes } or null if user not found
+ * @returns { storageUsedMB, storageLimitMB } or null if user not found
  */
 export async function getStorageInfo(userId: string) {
   return prisma.user.findUnique({
     where: { id: userId },
     select: {
-      storageUsedBytes: true,
-      storageLimitBytes: true,
+      storageUsedMB: true,
+      storageLimitMB: true,
     },
   });
 }

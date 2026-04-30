@@ -10,7 +10,7 @@ type Attachment = {
   mediaPublicId: string;
   mediaFileName: string | null;
   mediaMimeType: string | null;
-  mediaSizeBytes: number;
+  mediaSizeMB: number; // size in MB (Float)
 };
 
 type Receiver = {
@@ -205,7 +205,7 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
         mediaPublicId: signJson.key,
         mediaFileName: file.name,
         mediaMimeType: file.type,
-        mediaSizeBytes: file.size,
+        mediaSizeMB: file.size / (1024 * 1024),
       }]);
     } catch {
       setError("Upload failed. Please try again.");
@@ -398,6 +398,9 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
                       <span>{att.type === "IMAGE" ? "🖼" : "🎬"}</span>
                       <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--earth-mid)" }}>
                         {att.mediaFileName ?? att.mediaUrl}
+                        <span style={{ color: "var(--earth-muted)", marginLeft: 6, fontSize: 11 }}>
+                          ({att.mediaSizeMB.toFixed(1)} MB)
+                        </span>
                       </span>
                       <button
                         onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}

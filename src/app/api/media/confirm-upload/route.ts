@@ -1,13 +1,13 @@
 /**
  * API: POST /api/media/confirm-upload
  *
- * Purpose: Called by the frontend AFTER a successful direct-to-B2 presigned upload
- * to report the file size so we can increment the user's storageUsedMB.
+ * Purpose: Called by the frontend AFTER a successful presigned R2 upload
+ * to report the file size so the server can increment storageUsedMB.
  *
  * The presigned upload flow bypasses the server, so the server cannot measure
  * the file size during upload. The frontend reports it here after the PUT succeeds.
  *
- * Request body: { sizeMB: number }
+ * Request body: { sizeMB: number } — file size in MB (Float)
  * Response: { message: string }
  */
 
@@ -45,7 +45,8 @@ export async function POST(req: Request) {
       return Response.json({ error: "sizeMB must be greater than 0." }, { status: 400 });
     }
 
-    await incrementStorage(user.id, Math.round(sizeMB * 1024 * 1024));
+    // sizeMB is already in MB — pass directly to incrementStorage
+    await incrementStorage(user.id, sizeMB);
 
     return Response.json({ message: "Storage updated." });
   } catch (err) {

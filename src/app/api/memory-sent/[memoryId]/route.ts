@@ -138,7 +138,7 @@ export async function GET(_: Request, { params }: Params) {
  * 2. Fetch all attachments with R2 keys and sizes
  * 3. Delete each file from R2 (best-effort, non-fatal)
  * 4. Delete memory from DB (cascade deletes items + attachments)
- * 5. Decrement user storage by total MB of deleted files
+ * 5. Decrement user storage by total size in MB of deleted files
  */
 export async function DELETE(_: Request, { params }: Params) {
   try {
@@ -168,8 +168,8 @@ export async function DELETE(_: Request, { params }: Params) {
             status: true,
             attachments: {
               select: {
-                mediaPublicId: true,  // R2 object key for deletion
-                mediaSizeBytes: true, // size for storage decrement
+                mediaPublicId: true, // R2 object key for deletion
+                mediaSizeMB: true,   // size in MB for storage decrement
               },
             },
           },
@@ -198,11 +198,11 @@ export async function DELETE(_: Request, { params }: Params) {
     const allAttachments = memory.items.flatMap((item) => item.attachments ?? []);
 
     // Delete all attachment files from R2 (log errors but don't block deletion)
-    let totalSizeBytes = 0;
+    let totalSizeMB = 0;
     for (const att of allAttachments) {
       try {
         await deleteFromB2ByKey(att.mediaPublicId);
-        totalSizeBytes += Number(att.mediaSizeBytes);
+        totalSizeMB += att.mediaSizeMB;
       } catch (r2Err) {
         console.error("R2 delete error for key:", att.mediaPublicId, r2Err);
       }
@@ -211,9 +211,9 @@ export async function DELETE(_: Request, { params }: Params) {
     // Delete memory from DB (cascade deletes items + attachments)
     await prisma.memoryCollection.delete({ where: { id: memory.id } });
 
-    // Decrement user storage by total bytes of deleted files
-    if (totalSizeBytes > 0) {
-      await decrementStorage(user.id, totalSizeBytes);
+    // Decrement user storage by total size in MB of deleted files
+    if (totalSizeMB > 0) {
+      await decrementStorage(user.id, totalSizeMB);
     }
 
     return Response.json({

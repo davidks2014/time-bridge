@@ -118,8 +118,8 @@ export async function POST(req: Request) {
     const folder = itemType === "VIDEO" ? "memories/videos" : "memories/images";
     const { url, key } = await uploadToB2(buffer, file.name, file.type, folder);
 
-    // 7) Increment user storage usage in bytes
-    await incrementStorage(user.id, buffer.length);
+    // 7) Increment user storage usage in MB
+    await incrementStorage(user.id, buffer.length / (1024 * 1024));
 
     // 8) Return file metadata to frontend for saving as attachment
     return Response.json({

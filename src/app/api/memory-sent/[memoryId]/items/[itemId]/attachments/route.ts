@@ -1,12 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { deleteFromB2ByKey } from "@/lib/b2Storage";
+import { incrementStorage } from "@/lib/storageTracking";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-const MAX_IMAGE_BYTES = BigInt(10 * 1024 * 1024); // 10MB
-const MAX_VIDEO_BYTES = BigInt(200 * 1024 * 1024); // 200MB
+// File size limits in MB
+const MAX_IMAGE_MB = 10;
+const MAX_VIDEO_MB = 200;
 
 type Params = {
   params: Promise<{
@@ -31,12 +33,17 @@ function normalizeAttachmentType(raw: unknown): AttachmentType {
   throw new Error("INVALID_ATTACHMENT_TYPE");
 }
 
-function validateAttachmentSize(type: AttachmentType, mediaSizeBytes: bigint) {
-  if (type === "IMAGE" && mediaSizeBytes > MAX_IMAGE_BYTES) {
+/**
+ * Validate that the attachment does not exceed the per-type size limit.
+ * @param type       - IMAGE or VIDEO
+ * @param mediaSizeMB - File size in MB (Float)
+ */
+function validateAttachmentSize(type: AttachmentType, mediaSizeMB: number) {
+  if (type === "IMAGE" && mediaSizeMB > MAX_IMAGE_MB) {
     throw new Error("IMAGE_TOO_LARGE");
   }
 
-  if (type === "VIDEO" && mediaSizeBytes > MAX_VIDEO_BYTES) {
+  if (type === "VIDEO" && mediaSizeMB > MAX_VIDEO_MB) {
     throw new Error("VIDEO_TOO_LARGE");
   }
 }
@@ -49,12 +56,14 @@ async function cleanupB2Upload(mediaPublicId: string) {
  * POST /api/memory-sent/[memoryId]/items/[itemId]/attachments
  *
  * Purpose:
- * - Add a new attachment to an existing draft item
- * - Only owner can add
- * - Cannot add if item is released
- * - Cannot add if any item in same memory is already released
- * - Increase user's storageUsedBytes
- * - Backend-enforce max attachment size
+ * - Add a new attachment to an existing draft memory item
+ * - Only the owner can add
+ * - Cannot add if the item is already released
+ * - Cannot add if any item in the same memory is already released
+ * - Quota check against storageUsedMB / storageLimitMB
+ * - Increments storageUsedMB after successful save
+ *
+ * All size values are in MB (Float).
  */
 export async function POST(req: Request, { params }: Params) {
   try {
@@ -64,12 +73,13 @@ export async function POST(req: Request, { params }: Params) {
       return Response.json({ error: "Not logged in." }, { status: 401 });
     }
 
+    // Fetch user with MB-based storage fields for quota check
     const user = await prisma.user.findUnique({
       where: { email: normalizeEmail(session.user.email) },
       select: {
         id: true,
-        storageUsedBytes: true,
-        storageLimitBytes: true,
+        storageUsedMB: true,
+        storageLimitMB: true,
       },
     });
 
@@ -99,9 +109,10 @@ export async function POST(req: Request, { params }: Params) {
       ? String(body.mediaMimeType).trim()
       : null;
 
-    const rawSize = body?.mediaSizeBytes ?? body?.bytes ?? body?.originalFileSize ?? 0;
-    const mediaSizeBytes = BigInt(Number(rawSize) || 0);
-    const mediaSizeMB = Number(body?.mediaSizeMB ?? 0);
+    // Accept mediaSizeMB directly; fall back to converting bytes if only bytes provided
+    const rawMB = Number(body?.mediaSizeMB ?? 0);
+    const rawBytes = Number(body?.mediaSizeBytes ?? body?.bytes ?? body?.originalFileSize ?? 0);
+    const mediaSizeMB = rawMB > 0 ? rawMB : rawBytes / (1024 * 1024);
 
     if (!mediaUrl) {
       return Response.json({ error: "mediaUrl is required." }, { status: 400 });
@@ -114,17 +125,17 @@ export async function POST(req: Request, { params }: Params) {
       );
     }
 
-    if (mediaSizeBytes <= BigInt(0)) {
+    if (mediaSizeMB <= 0) {
       return Response.json(
-        { error: "mediaSizeBytes is required and must be greater than 0." },
+        { error: "mediaSizeMB is required and must be greater than 0." },
         { status: 400 }
       );
     }
 
     try {
-      validateAttachmentSize(type, mediaSizeBytes);
+      validateAttachmentSize(type, mediaSizeMB);
     } catch (e) {
-      // Best-effort cleanup in case file was already uploaded directly to R2
+      // Best-effort cleanup — file may already be in R2
       await cleanupB2Upload(mediaPublicId);
 
       if ((e as Error).message === "IMAGE_TOO_LARGE") {
@@ -158,16 +169,13 @@ export async function POST(req: Request, { params }: Params) {
     });
 
     if (!item) {
-      // Cleanup uploaded file because item is invalid
       await cleanupB2Upload(mediaPublicId);
-
       return Response.json({ error: "Item not found." }, { status: 404 });
     }
 
     // 2) Prevent add if item itself already released
     if (item.status === "RELEASED") {
       await cleanupB2Upload(mediaPublicId);
-
       return Response.json(
         { error: "This item is already released and cannot accept new attachments." },
         { status: 400 }
@@ -186,40 +194,37 @@ export async function POST(req: Request, { params }: Params) {
 
     if (releasedSibling) {
       await cleanupB2Upload(mediaPublicId);
-
       return Response.json(
         {
-          error:
-            "This memory is locked because at least one message has already been released.",
+          error: "This memory is locked because at least one message has already been released.",
         },
         { status: 400 }
       );
     }
 
-    // 4) Quota check again here
-    const usedBytes = BigInt(user.storageUsedBytes);
-    const limitBytes = BigInt(user.storageLimitBytes);
-    const projectedUsedBytes = usedBytes + mediaSizeBytes;
+    // 4) Quota check — all values in MB (Float)
+    const usedMB = user.storageUsedMB;
+    const limitMB = user.storageLimitMB;
+    const projectedUsedMB = usedMB + mediaSizeMB;
 
-    if (projectedUsedBytes > limitBytes) {
+    if (projectedUsedMB > limitMB) {
       await cleanupB2Upload(mediaPublicId);
-
       return Response.json(
         {
           error: "Storage quota exceeded. Please delete some files or upgrade your plan.",
           storage: {
-            usedBytes: usedBytes.toString(),
-            limitBytes: limitBytes.toString(),
-            incomingFileBytes: mediaSizeBytes.toString(),
-            projectedUsedBytes: projectedUsedBytes.toString(),
-            remainingBytes: (limitBytes > usedBytes ? limitBytes - usedBytes : BigInt(0)).toString(),
+            usedMB,
+            limitMB,
+            incomingMB: mediaSizeMB,
+            projectedMB: projectedUsedMB,
+            remainingMB: Math.max(0, limitMB - usedMB),
           },
         },
         { status: 400 }
       );
     }
 
-    // 5) Create attachment and update quota in one transaction
+    // 5) Create attachment and increment storage in one transaction
     const result = await prisma.$transaction(async (tx) => {
       const attachment = await tx.memoryAttachment.create({
         data: {
@@ -229,8 +234,7 @@ export async function POST(req: Request, { params }: Params) {
           mediaPublicId,
           mediaFileName,
           mediaMimeType,
-          mediaSizeBytes,
-          mediaSizeMB, // save for future deletion tracking
+          mediaSizeMB,
         },
         select: {
           id: true,
@@ -239,19 +243,16 @@ export async function POST(req: Request, { params }: Params) {
           mediaPublicId: true,
           mediaFileName: true,
           mediaMimeType: true,
-          mediaSizeBytes: true,
+          mediaSizeMB: true,
           createdAt: true,
           updatedAt: true,
         },
       });
 
+      // Increment storageUsedMB inside the transaction so quota and attachment are atomic
       await tx.user.update({
         where: { id: user.id },
-        data: {
-          storageUsedBytes: {
-            increment: mediaSizeBytes,
-          },
-        },
+        data: { storageUsedMB: { increment: mediaSizeMB } },
       });
 
       return attachment;
@@ -260,14 +261,11 @@ export async function POST(req: Request, { params }: Params) {
     return Response.json(
       {
         message: "Attachment added successfully.",
-        attachment: {
-          ...result,
-          mediaSizeBytes: result.mediaSizeBytes.toString(),
-        },
+        attachment: result,
         storage: {
-          usedBytes: projectedUsedBytes.toString(),
-          limitBytes: limitBytes.toString(),
-          remainingBytes: (limitBytes - projectedUsedBytes).toString(),
+          usedMB: projectedUsedMB,
+          limitMB,
+          remainingMB: Math.max(0, limitMB - projectedUsedMB),
         },
       },
       { status: 201 }
