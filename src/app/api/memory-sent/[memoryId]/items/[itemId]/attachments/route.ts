@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
 import { deleteFromB2ByKey } from "@/lib/b2Storage";
-import { incrementStorage } from "@/lib/storageTracking";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 
@@ -61,7 +60,6 @@ async function cleanupB2Upload(mediaPublicId: string) {
  * - Cannot add if the item is already released
  * - Cannot add if any item in the same memory is already released
  * - Quota check against storageUsedMB / storageLimitMB
- * - Increments storageUsedMB after successful save
  *
  * All size values are in MB (Float).
  */
@@ -224,38 +222,29 @@ export async function POST(req: Request, { params }: Params) {
       );
     }
 
-    // 5) Create attachment and increment storage in one transaction
-    const result = await prisma.$transaction(async (tx) => {
-      const attachment = await tx.memoryAttachment.create({
-        data: {
-          itemId,
-          type,
-          mediaUrl,
-          mediaPublicId,
-          mediaFileName,
-          mediaMimeType,
-          mediaSizeMB,
-        },
-        select: {
-          id: true,
-          type: true,
-          mediaUrl: true,
-          mediaPublicId: true,
-          mediaFileName: true,
-          mediaMimeType: true,
-          mediaSizeMB: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-
-      // Increment storageUsedMB inside the transaction so quota and attachment are atomic
-      await tx.user.update({
-        where: { id: user.id },
-        data: { storageUsedMB: { increment: mediaSizeMB } },
-      });
-
-      return attachment;
+    // 5) Create attachment record
+    // Storage already incremented by /api/media/confirm-upload during presigned upload
+    const result = await prisma.memoryAttachment.create({
+      data: {
+        itemId,
+        type,
+        mediaUrl,
+        mediaPublicId,
+        mediaFileName,
+        mediaMimeType,
+        mediaSizeMB,
+      },
+      select: {
+        id: true,
+        type: true,
+        mediaUrl: true,
+        mediaPublicId: true,
+        mediaFileName: true,
+        mediaMimeType: true,
+        mediaSizeMB: true,
+        createdAt: true,
+        updatedAt: true,
+      },
     });
 
     return Response.json(
