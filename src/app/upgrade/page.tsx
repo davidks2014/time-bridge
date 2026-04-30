@@ -59,7 +59,7 @@ export default function UpgradePage() {
       storage: "5 GB",
       description: "For individuals preserving memories",
       features: ["5 GB storage", "Everything in Free", "Priority support"],
-      priceId: process.env.NEXT_PUBLIC_STRIPE_PLUS_PRICE_ID ?? null,
+      priceId: "price_1TRuZyE4BN2ZuVDKdGYxy5Ei",
       recommended: false,
     },
     {
@@ -70,7 +70,7 @@ export default function UpgradePage() {
       storage: "20 GB",
       description: "For families sharing memories",
       features: ["20 GB storage", "Everything in Plus", "Best for families"],
-      priceId: process.env.NEXT_PUBLIC_STRIPE_PREMIUM_PRICE_ID ?? null,
+      priceId: "price_1TRudjE4BN2ZuVDK1cF5GyFt",
       recommended: true,
     },
   ];
