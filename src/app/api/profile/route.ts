@@ -37,6 +37,9 @@ export async function GET() {
         snoozedUntil: true,
         storageUsedMB: true,
         storageLimitMB: true,
+        stripePlanName: true,
+        stripeCustomerId: true,
+        stripeSubscriptionId: true,
       },
     });
 

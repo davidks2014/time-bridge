@@ -23,6 +23,9 @@ type ProfileData = {
   trustedContactAddress: string;
   storageUsedMB: number;
   storageLimitMB: number;
+  stripePlanName: string | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
 };
 
 type Tab = "account" | "trusted" | "privacy";
@@ -170,6 +173,12 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleManageSubscription() {
+    const res = await fetch("/api/stripe/portal", { method: "POST" });
+    const json = await res.json();
+    if (json.url) window.location.href = json.url;
+  }
+
   async function deleteAccount() {
     if (deleteConfirm !== "DELETE") {
       setErrorMsg('Type "DELETE" to confirm account deletion.');
@@ -203,7 +212,7 @@ export default function ProfilePage() {
     : "var(--sage)";
 
   const storageUsedMB  = profile?.storageUsedMB  ?? 0;
-  const storageLimitMB = profile?.storageLimitMB ?? 1024;
+  const storageLimitMB = profile?.storageLimitMB ?? 500;
   const storagePct     = Math.min((storageUsedMB / storageLimitMB) * 100, 100);
 
   return (
@@ -275,6 +284,63 @@ export default function ProfilePage() {
         {/* ── Tab: Account ── */}
         {activeTab === "account" && (
           <div className="tb-fade-in">
+
+            {/* Current plan */}
+            <div style={{
+              padding: "16px 20px",
+              background: "#FAF7F2",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              marginBottom: 16,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}>
+              <div>
+                <div className="tb-section-label" style={{ marginBottom: 4 }}>Current plan</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "var(--earth)" }}>
+                  {profile?.stripePlanName ?? "Free"}
+                </div>
+              </div>
+              {profile?.stripeSubscriptionId ? (
+                <button
+                  onClick={handleManageSubscription}
+                  style={{
+                    background: "var(--ivory)",
+                    color: "var(--earth)",
+                    border: "1px solid var(--gold-light)",
+                    borderRadius: "var(--radius-sm)",
+                    padding: "8px 16px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  Manage subscription
+                </button>
+              ) : (
+                <a
+                  href="/upgrade"
+                  style={{
+                    background: "var(--ivory)",
+                    color: "var(--earth)",
+                    border: "1px solid var(--gold-light)",
+                    borderRadius: "var(--radius-sm)",
+                    padding: "8px 16px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textDecoration: "none",
+                    letterSpacing: "0.5px",
+                    display: "inline-block",
+                  }}
+                >
+                  Upgrade storage
+                </a>
+              )}
+            </div>
 
             {/* Storage usage */}
             <div style={{
