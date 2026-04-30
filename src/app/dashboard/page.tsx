@@ -421,7 +421,7 @@ export default function DashboardPage() {
               {wizardStep === 1 ? (
                 <>
                   {/* Section label */}
-                  <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A", textAlign: "center", marginBottom: 24, opacity: 0.85 }}>
+                  <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A", textAlign: "center", marginBottom: 24, opacity: 0.85 }}>
                     WHAT BRINGS YOU TO TIME BRIDGE?
                   </div>
 
@@ -429,7 +429,7 @@ export default function DashboardPage() {
                   <style>{`
                     .tb-wizard-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
                     @media (max-width: 600px) { .tb-wizard-cards { grid-template-columns: 1fr !important; } }
-                    .tb-wcard { background: #fff; border: 1px solid rgba(184,150,90,0.2); border-radius: 20px; padding: 36px 24px 28px; display: flex; flex-direction: column; align-items: center; text-align: center; cursor: pointer; transition: border-color 220ms ease, background 220ms ease, transform 180ms ease; position: relative; overflow: hidden; }
+                    .tb-wcard { background: #fff; border: 1px solid rgba(184,150,90,0.2); border-radius: 20px; padding: 40px 28px 32px; display: flex; flex-direction: column; align-items: center; text-align: center; cursor: pointer; transition: border-color 220ms ease, background 220ms ease, transform 180ms ease; position: relative; overflow: hidden; }
                     .tb-wcard:hover { transform: translateY(-3px); border-color: rgba(184,150,90,0.5); }
                     .tb-wcard.sel-gold { background: #FAF7F2; border: 1.5px solid #B8965A; }
                     .tb-wcard.sel-sage { background: #FAF7F2; border: 1.5px solid #7C9A7E; }
@@ -497,17 +497,17 @@ export default function DashboardPage() {
                           </div>
 
                           {/* Number */}
-                          <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.16em", color: selected ? card.accentColor : "rgba(184,150,90,0.4)", marginBottom: 10, transition: "color 220ms" }}>
+                          <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.16em", color: selected ? card.accentColor : "rgba(184,150,90,0.4)", marginBottom: 10, transition: "color 220ms" }}>
                             {card.num}
                           </div>
 
                           {/* Title */}
-                          <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 22, fontWeight: 600, color: "#2C1810", lineHeight: 1.2, marginBottom: 12 }}>
+                          <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 26, fontWeight: 600, color: "#2C1810", lineHeight: 1.2, marginBottom: 12 }}>
                             {card.title}
                           </div>
 
                           {/* Body */}
-                          <div style={{ fontSize: 13, color: "#9A8878", lineHeight: 1.85, flex: 1 }}>
+                          <div style={{ fontSize: 15, color: "#9A8878", lineHeight: 1.85, flex: 1 }}>
                             {card.body}
                           </div>
 
@@ -535,8 +535,8 @@ export default function DashboardPage() {
                         color: "#FAF7F2",
                         border: "none",
                         borderRadius: 12,
-                        padding: "17px 0",
-                        fontSize: 14,
+                        padding: "19px 0",
+                        fontSize: 16,
                         fontWeight: 700,
                         letterSpacing: "0.06em",
                         cursor: wizardSelection ? "pointer" : "not-allowed",
@@ -551,7 +551,7 @@ export default function DashboardPage() {
                         ? `Begin — ${{ planner: "Protect my family", parent: "A letter to my child", keeper: "Capture a moment" }[wizardSelection]} →`
                         : "Choose how to begin"}
                     </button>
-                    <div style={{ marginTop: 12, fontSize: 11, color: "rgba(184,150,90,0.65)", letterSpacing: "0.04em" }}>
+                    <div style={{ marginTop: 12, fontSize: 13, color: "rgba(184,150,90,0.65)", letterSpacing: "0.04em" }}>
                       You can always create different memories later
                     </div>
                   </div>
