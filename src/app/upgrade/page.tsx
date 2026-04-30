@@ -7,7 +7,7 @@
  * Design: Time Bridge design system (ivory bg, gold accent, dark brown text, Lato font)
  */
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
@@ -16,6 +16,18 @@ export default function UpgradePage() {
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [currentPlan, setCurrentPlan] = useState<"free" | "plus" | "premium">("free");
+
+  useEffect(() => {
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then((json) => {
+        const name = json.profile?.stripePlanName;
+        if (name === "plus" || name === "premium") setCurrentPlan(name);
+        else setCurrentPlan("free");
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleUpgrade(priceId: string, planKey: string) {
     setError("");
@@ -42,6 +54,7 @@ export default function UpgradePage() {
   const plans = [
     {
       key: "free",
+      planKey: "free" as const,
       name: "Free",
       price: "$0",
       period: "",
@@ -53,6 +66,7 @@ export default function UpgradePage() {
     },
     {
       key: "plus",
+      planKey: "plus" as const,
       name: "Plus Plan",
       price: "$3.90",
       period: "/month",
@@ -64,6 +78,7 @@ export default function UpgradePage() {
     },
     {
       key: "premium",
+      planKey: "premium" as const,
       name: "Premium Plan",
       price: "$8.90",
       period: "/month",
@@ -97,7 +112,7 @@ export default function UpgradePage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
           {plans.map((plan) => (
             <div key={plan.key} style={{
-              background: "#fff",
+              background: plan.planKey === currentPlan ? "#FAF7F2" : "#fff",
               border: plan.recommended ? "2px solid #B8965A" : "1px solid #E8D5B7",
               borderRadius: 16,
               padding: "28px 24px",
@@ -124,7 +139,9 @@ export default function UpgradePage() {
                   </li>
                 ))}
               </ul>
-              {plan.priceId ? (
+              {plan.planKey === currentPlan ? (
+                <div style={{ textAlign: "center", fontSize: 13, color: "#888", padding: "12px 0" }}>Your current plan</div>
+              ) : plan.priceId ? (
                 <button
                   onClick={() => handleUpgrade(plan.priceId!, plan.key)}
                   disabled={loading === plan.key}
@@ -143,9 +160,7 @@ export default function UpgradePage() {
                 >
                   {loading === plan.key ? "Redirecting..." : `Upgrade to ${plan.name}`}
                 </button>
-              ) : (
-                <div style={{ textAlign: "center", fontSize: 13, color: "#888", padding: "12px 0" }}>Your current plan</div>
-              )}
+              ) : null}
             </div>
           ))}
         </div>
