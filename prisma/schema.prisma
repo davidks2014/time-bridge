@@ -296,6 +296,14 @@ model User {
   storageLimitMB Float @default(500)
 
   // =========================================
+  // Stripe / Subscription
+  // =========================================
+  stripeCustomerId     String?
+  stripePriceId        String?
+  stripeSubscriptionId String?
+  stripePlanName       String?
+
+  // =========================================
   // Timestamps
   // =========================================
   createdAt DateTime @default(now())
