@@ -46,6 +46,17 @@ export async function GET() {
       prisma.visitLog.count(),
     ]);
 
+    const [freePlanUsers, plusPlanUsers, premiumPlanUsers, storageResult] = await Promise.all([
+      prisma.user.count({ where: { stripePlanName: null } }),
+      prisma.user.count({ where: { stripePlanName: "plus" } }),
+      prisma.user.count({ where: { stripePlanName: "premium" } }),
+      prisma.user.aggregate({ _sum: { storageUsedMB: true } }),
+    ]);
+
+    const mrr = (plusPlanUsers * 3.90) + (premiumPlanUsers * 8.90);
+    const totalStorageUsedMB = storageResult._sum.storageUsedMB ?? 0;
+    const r2CostEstimate = (totalStorageUsedMB / 1024) * 0.015;
+
     return Response.json({
       stats: {
         totalUsers,
@@ -56,6 +67,12 @@ export async function GET() {
         unclaimedReceivers,
         deliveryFailed,
         totalVisitLogs,
+        freePlanUsers,
+        plusPlanUsers,
+        premiumPlanUsers,
+        mrr,
+        totalStorageUsedMB,
+        r2CostEstimate,
       },
     });
 

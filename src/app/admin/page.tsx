@@ -14,6 +14,12 @@ type AdminStats = {
   unclaimedReceivers: number;
   deliveryFailed: number;
   totalVisitLogs: number;
+  freePlanUsers: number;
+  plusPlanUsers: number;
+  premiumPlanUsers: number;
+  mrr: number;
+  totalStorageUsedMB: number;
+  r2CostEstimate: number;
 };
 
 const NAV_ITEMS = [
@@ -218,6 +224,52 @@ export default function AdminHomePage() {
                 )}
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Storage & Revenue */}
+        {stats && (
+          <div className="tb-fade-in" style={{ marginBottom: 32 }}>
+            <div className="tb-section-label" style={{ color: "var(--gold-light)", marginBottom: 16 }}>
+              Storage & Revenue
+            </div>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 12,
+            }}>
+              {[
+                { label: "Free Plan Users",       value: String(stats.freePlanUsers),                             color: "var(--gold-light)" },
+                { label: "Plus Plan Users",        value: String(stats.plusPlanUsers),                             color: "var(--gold-light)" },
+                { label: "Premium Plan Users",     value: String(stats.premiumPlanUsers),                          color: "var(--gold-light)" },
+                { label: "MRR (SGD)",              value: `$${stats.mrr.toFixed(2)}`,                              color: "#7CA87C" },
+                { label: "Total Storage Used",     value: `${(stats.totalStorageUsedMB / 1024).toFixed(2)} GB`,   color: "var(--gold-light)" },
+                { label: "R2 Cost Est. (USD/mo)",  value: `$${stats.r2CostEstimate.toFixed(2)}`,                  color: "#9B8060" },
+              ].map((stat, i) => (
+                <div
+                  key={i}
+                  style={{
+                    background: "#2C2416",
+                    border: "1px solid #3D3020",
+                    borderRadius: "var(--radius-md)",
+                    padding: "18px",
+                  }}
+                >
+                  <div style={{
+                    fontFamily: "var(--font-display)",
+                    fontSize: 40,
+                    fontWeight: 300,
+                    color: stat.color,
+                    lineHeight: 1,
+                  }}>
+                    {stat.value}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#9B8060", marginTop: 6, letterSpacing: "0.5px" }}>
+                    {stat.label}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
