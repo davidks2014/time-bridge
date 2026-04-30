@@ -150,28 +150,37 @@ export default function UpgradePage() {
                   </li>
                 ))}
               </ul>
-              {plan.planKey === currentPlan ? (
-                <div style={{ textAlign: "center", fontSize: 13, color: "#888", padding: "12px 0" }}>Your current plan</div>
-              ) : plan.priceId ? (
-                <button
-                  onClick={() => handleUpgrade(plan.priceId!, plan.key)}
-                  disabled={loading === plan.key}
-                  style={{
-                    background: plan.recommended ? "#2C1810" : "#FAF7F2",
-                    color: plan.recommended ? "#fff" : "#2C1810",
-                    border: "1px solid #2C1810",
-                    borderRadius: 8,
-                    padding: "12px 0",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    cursor: loading ? "not-allowed" : "pointer",
-                    width: "100%",
-                    opacity: loading === plan.key ? 0.6 : 1,
-                  }}
-                >
-                  {loading === plan.key ? "Redirecting..." : `Upgrade to ${plan.name}`}
-                </button>
-              ) : null}
+              {(() => {
+                const planLevel = { free: 0, plus: 1, premium: 2 };
+                const currentLevel = planLevel[currentPlan];
+                const thisPlanLevel = planLevel[plan.planKey];
+                if (thisPlanLevel === currentLevel) {
+                  return <div style={{ textAlign: "center", fontSize: 13, color: "#888", padding: "12px 0" }}>Your current plan</div>;
+                }
+                if (thisPlanLevel > currentLevel) {
+                  return (
+                    <button
+                      onClick={() => handleUpgrade(plan.priceId!, plan.key)}
+                      disabled={loading === plan.key}
+                      style={{
+                        background: plan.recommended ? "#2C1810" : "#FAF7F2",
+                        color: plan.recommended ? "#fff" : "#2C1810",
+                        border: "1px solid #2C1810",
+                        borderRadius: 8,
+                        padding: "12px 0",
+                        fontSize: 14,
+                        fontWeight: 600,
+                        cursor: loading ? "not-allowed" : "pointer",
+                        width: "100%",
+                        opacity: loading === plan.key ? 0.6 : 1,
+                      }}
+                    >
+                      {loading === plan.key ? "Redirecting..." : `Upgrade to ${plan.name}`}
+                    </button>
+                  );
+                }
+                return null;
+              })()}
             </div>
           ))}
         </div>
