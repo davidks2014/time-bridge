@@ -415,13 +415,7 @@ export async function POST(req: Request) {
       createdCollections.push(collection);
     }
 
-    // Increment storage usage once for the shared attachments (MB)
-    if (attachments.length > 0) {
-      await prisma.user.update({
-        where: { id: me.id },
-        data: { storageUsedMB: { increment: totalAttachmentMB } },
-      });
-    }
+    // Storage already incremented by /api/media/confirm-upload or /api/media/upload during file upload
 
     return Response.json(
       {
