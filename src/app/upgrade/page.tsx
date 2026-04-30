@@ -17,6 +17,7 @@ export default function UpgradePage() {
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [currentPlan, setCurrentPlan] = useState<"free" | "plus" | "premium">("free");
+  const [planLoading, setPlanLoading] = useState(true);
 
   useEffect(() => {
     async function loadPlan() {
@@ -26,7 +27,10 @@ export default function UpgradePage() {
         const name = json.profile?.stripePlanName;
         if (name === "plus" || name === "premium") setCurrentPlan(name);
         else setCurrentPlan("free");
-      } catch {}
+      } catch {
+      } finally {
+        setPlanLoading(false);
+      }
     }
     loadPlan();
   }, []);
@@ -111,6 +115,11 @@ export default function UpgradePage() {
           </div>
         )}
 
+        {planLoading ? (
+          <div style={{ textAlign: "center", padding: "40px 0", color: "#B8965A", fontSize: 14 }}>
+            Loading...
+          </div>
+        ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
           {plans.map((plan) => (
             <div key={plan.key} style={{
@@ -166,6 +175,7 @@ export default function UpgradePage() {
             </div>
           ))}
         </div>
+        )}
 
         <p style={{ marginTop: 32, fontSize: 12, color: "#aaa", textAlign: "center" }}>
           Payments processed securely by Stripe. Cancel anytime from your profile.
