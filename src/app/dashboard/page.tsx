@@ -415,17 +415,17 @@ export default function DashboardPage() {
 
         {memories.length === 0 ? (
           stats ? (
-            <div className="tb-fade-in" style={{ maxWidth: 560, margin: "0 auto", padding: "40px 0" }}>
+            <div className="tb-fade-in" style={{ maxWidth: 860, margin: "0 auto", padding: "60px 0" }}>
               {wizardStep === 1 ? (
                 <>
                   {/* Section label */}
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "#B8965A", textTransform: "uppercase", marginBottom: 16 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", color: "#B8965A", textTransform: "uppercase", marginBottom: 16 }}>
                     What brings you here?
                   </div>
 
                   {/* Cards */}
                   <style>{`@media(max-width:600px){.tb-wizard-cards{grid-template-columns:1fr!important}}`}</style>
-                  <div className="tb-wizard-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 24 }}>
+                  <div className="tb-wizard-cards" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20, marginBottom: 24 }}>
                     {([
                       { key: "planner" as const, icon: "🛡️", title: "Plan for my family",      body: "Make sure they know everything I have prepared — policies, assets, and my final words" },
                       { key: "parent"  as const, icon: "💌", title: "Messages for my child",    body: "Deliver my love at the right moment — their 18th birthday, graduation, or wedding day" },
@@ -440,7 +440,7 @@ export default function DashboardPage() {
                             background: selected ? "#FAF7F2" : "#fff",
                             border: `${selected ? "2px" : "1.5px"} solid ${selected ? "#B8965A" : "#E8D5B7"}`,
                             borderRadius: 16,
-                            padding: "22px 18px",
+                            padding: "32px 28px",
                             cursor: "pointer",
                             transition: "border-color 200ms ease, background 200ms ease",
                             display: "flex",
@@ -453,13 +453,13 @@ export default function DashboardPage() {
                             if (!selected) { e.currentTarget.style.borderColor = "#E8D5B7"; e.currentTarget.style.background = "#fff"; }
                           }}
                         >
-                          <div style={{ width: 36, height: 36, borderRadius: 8, background: selected ? "#2C1810" : "#F5EEE6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+                          <div style={{ width: 48, height: 48, borderRadius: 12, background: selected ? "#2C1810" : "#F5EEE6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>
                             {card.icon}
                           </div>
-                          <div style={{ fontSize: 14, fontWeight: 700, color: "#2C1810", marginTop: 14, fontFamily: "var(--font-body)" }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: "#2C1810", marginTop: 14, fontFamily: "var(--font-body)" }}>
                             {card.title}
                           </div>
-                          <div style={{ fontSize: 12, color: "#888", lineHeight: 1.6, marginTop: 6, flex: 1 }}>
+                          <div style={{ fontSize: 13, color: "#888", lineHeight: 1.6, marginTop: 6, flex: 1 }}>
                             {card.body}
                           </div>
                           <div style={{ marginTop: 14 }}>
@@ -482,8 +482,8 @@ export default function DashboardPage() {
                       color: "#FAF7F2",
                       border: "none",
                       borderRadius: 10,
-                      padding: "14px",
-                      fontSize: 14,
+                      padding: "16px",
+                      fontSize: 15,
                       fontWeight: 700,
                       cursor: wizardSelection ? "pointer" : "not-allowed",
                       letterSpacing: "0.04em",
