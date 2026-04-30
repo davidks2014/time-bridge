@@ -132,7 +132,8 @@ export default function DashboardPage() {
     : 0;
 
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const greeting    = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const timeOfDay   = hour < 12 ? "morning"      : hour < 17 ? "afternoon"      : "evening";
 
   return (
     <div className="tb-page tb-page-with-tabs">
@@ -357,8 +358,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Create memory button ── */}
-        <button
+        {/* ── Create memory button (returning users only) ── */}
+        {memories.length > 0 && <button
           className="tb-fade-in tb-stagger-4"
           onClick={() => setShowModal(true)}
           disabled={!isApproved}
@@ -407,99 +408,125 @@ export default function DashboardPage() {
             flexShrink: 0,
           }}>+</div>
           Create a new memory
-        </button>
+        </button>}
 
         {/* ── Memory list ── */}
-        <div className="tb-section-label">Your memories</div>
+        {memories.length > 0 && <div className="tb-section-label">Your memories</div>}
 
         {memories.length === 0 ? (
           stats ? (
-            <div className="tb-fade-in" style={{ maxWidth: 680, margin: "0 auto" }}>
+            <div className="tb-fade-in" style={{ maxWidth: 560, margin: "0 auto", padding: "40px 0" }}>
               {wizardStep === 1 ? (
                 <>
-                  <div style={{ textAlign: "center", marginBottom: 32 }}>
-                    <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 28, fontWeight: 700, color: "#2C1810", marginBottom: 8 }}>
-                      What brings you to Time Bridge?
-                    </div>
-                    <div style={{ fontSize: 16, color: "#666", lineHeight: 1.6 }}>
-                      Help us personalise your experience.
+                  {/* Envelope icon */}
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
+                    <div style={{ position: "relative", width: 72, height: 72, borderRadius: 16, background: "#2C1810", overflow: "hidden" }}>
+                      <div style={{ position: "absolute", top: 0, left: 0, width: 0, height: 0, borderLeft: "36px solid transparent", borderRight: "36px solid transparent", borderTop: "26px solid #B8965A" }} />
+                      <div style={{ position: "absolute", bottom: 0, left: 0, width: 0, height: 0, borderLeft: "36px solid transparent", borderRight: "36px solid transparent", borderBottom: "20px solid rgba(184,150,90,0.35)" }} />
                     </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 24 }}>
+                  {/* Greeting */}
+                  <div style={{ textAlign: "center", marginBottom: 36 }}>
+                    <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 34, fontWeight: 400, color: "#2C1810", lineHeight: 1.2 }}>
+                      Good {timeOfDay}, {firstName}.
+                    </div>
+                    <div style={{ fontFamily: "Lato, sans-serif", fontSize: 15, fontWeight: 300, color: "#888", marginTop: 8 }}>
+                      The people you love deserve to receive your words.
+                    </div>
+                  </div>
+
+                  {/* Section label */}
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", color: "#B8965A", textTransform: "uppercase", marginBottom: 16 }}>
+                    What brings you here?
+                  </div>
+
+                  {/* Cards */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 24 }}>
                     {([
-                      { key: "planner" as const, icon: "🛡️", title: "Plan for my family",           body: "Make sure they know everything I have prepared — policies, assets, and my final words" },
-                      { key: "parent"  as const, icon: "💌", title: "Leave messages for my child",   body: "Deliver my love at the right moment — their 18th birthday, graduation, or wedding day" },
-                      { key: "keeper"  as const, icon: "📸", title: "Capture and share memories",    body: "Preserve moments and share them with the people I love" },
-                    ] as const).map((card) => (
-                      <div
-                        key={card.key}
-                        onClick={() => setWizardSelection(card.key)}
-                        style={{
-                          background: wizardSelection === card.key ? "#FAF7F2" : "#fff",
-                          border: `2px solid ${wizardSelection === card.key ? "#B8965A" : "#E8D5B7"}`,
-                          borderRadius: 16,
-                          padding: 24,
-                          cursor: "pointer",
-                          transition: "all 200ms ease",
-                        }}
-                        onMouseEnter={(e) => {
-                          if (wizardSelection !== card.key) {
-                            e.currentTarget.style.borderColor = "#B8965A";
-                            e.currentTarget.style.background = "#FDFAF5";
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (wizardSelection !== card.key) {
-                            e.currentTarget.style.borderColor = "#E8D5B7";
-                            e.currentTarget.style.background = "#fff";
-                          }
-                        }}
-                        onMouseDown={(e) => { e.currentTarget.style.opacity = "0.85"; }}
-                        onMouseUp={(e) => { e.currentTarget.style.opacity = "1"; }}
-                      >
-                        <div style={{ fontSize: 32, marginBottom: 12 }}>{card.icon}</div>
-                        <div style={{ fontFamily: "var(--font-body)", fontSize: 15, fontWeight: 700, color: "#2C1810", marginBottom: 8 }}>
-                          {card.title}
+                      { key: "planner" as const, icon: "🛡️", title: "Plan for my family",      body: "Make sure they know everything I have prepared — policies, assets, and my final words" },
+                      { key: "parent"  as const, icon: "💌", title: "Messages for my child",    body: "Deliver my love at the right moment — their 18th birthday, graduation, or wedding day" },
+                      { key: "keeper"  as const, icon: "📸", title: "Capture a moment",         body: "Preserve memories and share them with the people I love" },
+                    ] as const).map((card) => {
+                      const selected = wizardSelection === card.key;
+                      return (
+                        <div
+                          key={card.key}
+                          onClick={() => setWizardSelection(card.key)}
+                          style={{
+                            background: selected ? "#FAF7F2" : "#fff",
+                            border: `${selected ? "2px" : "1.5px"} solid ${selected ? "#B8965A" : "#E8D5B7"}`,
+                            borderRadius: 16,
+                            padding: "22px 18px",
+                            cursor: "pointer",
+                            transition: "border-color 200ms ease, background 200ms ease",
+                            display: "flex",
+                            flexDirection: "column",
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!selected) { e.currentTarget.style.borderColor = "#B8965A"; e.currentTarget.style.background = "#FDFAF5"; }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!selected) { e.currentTarget.style.borderColor = "#E8D5B7"; e.currentTarget.style.background = "#fff"; }
+                          }}
+                        >
+                          <div style={{ width: 36, height: 36, borderRadius: 8, background: selected ? "#2C1810" : "#F5EEE6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>
+                            {card.icon}
+                          </div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#2C1810", marginTop: 14, fontFamily: "var(--font-body)" }}>
+                            {card.title}
+                          </div>
+                          <div style={{ fontSize: 12, color: "#888", lineHeight: 1.6, marginTop: 6, flex: 1 }}>
+                            {card.body}
+                          </div>
+                          <div style={{ marginTop: 14 }}>
+                            <div style={{ width: 20, height: 20, borderRadius: "50%", background: selected ? "#B8965A" : "transparent", border: `2px solid ${selected ? "#B8965A" : "#E8D5B7"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              {selected && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#fff" }} />}
+                            </div>
+                          </div>
                         </div>
-                        <div style={{ fontSize: 13, color: "#666", lineHeight: 1.6 }}>
-                          {card.body}
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
-                  {wizardSelection && (
-                    <button
-                      onClick={() => setWizardStep(2)}
-                      style={{
-                        width: "100%",
-                        background: "#B8965A",
-                        color: "#2C1810",
-                        border: "none",
-                        borderRadius: 12,
-                        padding: "16px 24px",
-                        fontSize: 15,
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        letterSpacing: "0.5px",
-                        transition: "all 200ms ease",
-                        fontFamily: "var(--font-body)",
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = "#A07E4A"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = "#B8965A"; }}
-                      onMouseDown={(e) => { e.currentTarget.style.opacity = "0.85"; }}
-                      onMouseUp={(e) => { e.currentTarget.style.opacity = "1"; }}
-                    >
-                      Continue
-                    </button>
-                  )}
+                  {/* CTA button — always visible, disabled until selection */}
+                  <button
+                    onClick={() => { if (wizardSelection) setWizardStep(2); }}
+                    disabled={!wizardSelection}
+                    style={{
+                      width: "100%",
+                      background: "#2C1810",
+                      color: "#FAF7F2",
+                      border: "none",
+                      borderRadius: 10,
+                      padding: "14px",
+                      fontSize: 14,
+                      fontWeight: 700,
+                      cursor: wizardSelection ? "pointer" : "not-allowed",
+                      letterSpacing: "0.04em",
+                      opacity: wizardSelection ? 1 : 0.4,
+                      transition: "opacity 200ms ease",
+                      fontFamily: "var(--font-body)",
+                    }}
+                    onMouseEnter={(e) => { if (wizardSelection) e.currentTarget.style.opacity = "0.85"; }}
+                    onMouseLeave={(e) => { if (wizardSelection) e.currentTarget.style.opacity = "1"; }}
+                    onMouseDown={(e) => { if (wizardSelection) e.currentTarget.style.transform = "scale(0.99)"; }}
+                    onMouseUp={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
+                  >
+                    {wizardSelection
+                      ? `Begin — ${{ planner: "Plan for my family", parent: "Messages for my child", keeper: "Capture a moment" }[wizardSelection]} →`
+                      : "Choose how to begin"}
+                  </button>
+
+                  <div style={{ textAlign: "center", marginTop: 10, fontSize: 11, color: "#B8965A" }}>
+                    You can always create different memories later
+                  </div>
                 </>
               ) : (
                 <>
                   <button
                     onClick={() => setWizardStep(1)}
-                    style={{ background: "none", border: "none", color: "#B8965A", cursor: "pointer", fontSize: 13, fontWeight: 600, padding: 0, marginBottom: 32, display: "inline-block" }}
+                    style={{ background: "none", border: "none", color: "#B8965A", cursor: "pointer", fontSize: 12, fontWeight: 600, padding: 0, marginBottom: 24, display: "inline-block" }}
                   >
                     ← Back
                   </button>
@@ -507,13 +534,13 @@ export default function DashboardPage() {
                     const content = {
                       planner: {
                         heading: "Let's protect your family",
-                        body: "Start by creating a memory that documents everything your family needs to know — your insurance, your assets, and your final words. We will make sure they receive it.",
+                        body: "Start by documenting everything your family needs to know — your insurance, your assets, and your final words. We will make sure they receive it.",
                         cta: "Create my family's safety net →",
                       },
                       parent: {
                         heading: "Let's capture your love",
-                        body: "Create your first milestone memory. Choose a moment in your child's future — their 18th birthday, graduation, or wedding day — and write the words you want them to receive.",
-                        cta: "Create my first milestone memory →",
+                        body: "Create your first milestone memory. Choose a moment in your child's future and write the words you want them to receive — on their birthday, graduation, or wedding day.",
+                        cta: "Write my first milestone message →",
                       },
                       keeper: {
                         heading: "Let's preserve a moment",
@@ -522,32 +549,33 @@ export default function DashboardPage() {
                       },
                     }[wizardSelection];
                     return (
-                      <div style={{ textAlign: "center", padding: "8px 0 16px" }}>
-                        <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 28, fontWeight: 700, color: "#2C1810", marginBottom: 16 }}>
+                      <div style={{ textAlign: "center", maxWidth: 480, margin: "0 auto" }}>
+                        <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 28, fontWeight: 400, color: "#2C1810" }}>
                           {content.heading}
                         </div>
-                        <div style={{ fontSize: 16, color: "#666", lineHeight: 1.8, maxWidth: 480, margin: "0 auto 40px" }}>
+                        <div style={{ fontSize: 15, color: "#666", lineHeight: 1.7, marginTop: 12, marginBottom: 32 }}>
                           {content.body}
                         </div>
                         <button
                           onClick={() => setShowModal(true)}
                           style={{
-                            background: "#B8965A",
-                            color: "#2C1810",
+                            width: "100%",
+                            background: "#2C1810",
+                            color: "#FAF7F2",
                             border: "none",
-                            borderRadius: 12,
-                            padding: "16px 32px",
-                            fontSize: 15,
+                            borderRadius: 10,
+                            padding: "14px",
+                            fontSize: 14,
                             fontWeight: 700,
                             cursor: "pointer",
-                            letterSpacing: "0.5px",
+                            letterSpacing: "0.04em",
                             transition: "all 200ms ease",
                             fontFamily: "var(--font-body)",
                           }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = "#A07E4A"; e.currentTarget.style.transform = "translateY(-1px)"; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = "#B8965A"; e.currentTarget.style.transform = "translateY(0)"; }}
-                          onMouseDown={(e) => { e.currentTarget.style.opacity = "0.85"; }}
-                          onMouseUp={(e) => { e.currentTarget.style.opacity = "1"; }}
+                          onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.85"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+                          onMouseDown={(e) => { e.currentTarget.style.transform = "scale(0.99)"; }}
+                          onMouseUp={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
                         >
                           {content.cta}
                         </button>
