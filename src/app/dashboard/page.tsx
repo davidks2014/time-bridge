@@ -152,6 +152,7 @@ export default function DashboardPage() {
       <div className="tb-container" style={{ paddingTop: 32, paddingBottom: 48 }}>
 
         {/* ── Greeting ── */}
+        {memories.length > 0 && (
         <div className="tb-fade-in" style={{ marginBottom: 28 }}>
           <h1 style={{ marginBottom: 4 }}>
             {greeting}, {firstName}
@@ -160,6 +161,7 @@ export default function DashboardPage() {
             Your legacy is safely held — {memories.length} {memories.length === 1 ? "memory" : "memories"} created
           </p>
         </div>
+        )}
 
         {/* ── Verification rejected banner ── */}
         {verStatus === "REJECTED" && (
@@ -418,17 +420,6 @@ export default function DashboardPage() {
             <div className="tb-fade-in" style={{ maxWidth: 860, margin: "0 auto", padding: "32px 0" }}>
               {wizardStep === 1 ? (
                 <>
-                  {/* Greeting */}
-                  <div style={{ textAlign: "center", marginBottom: 8 }}>
-                    <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 40, fontWeight: 300, color: "#2C1810", lineHeight: 1.2 }}>
-                      Good {timeOfDay}, <em>{firstName}.</em>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: 11, letterSpacing: "0.16em", color: "#B8965A", textAlign: "center", marginBottom: 6, fontWeight: 400 }}>
-                    YOUR LEGACY IS SAFELY HELD
-                  </div>
-                  <div style={{ width: 36, height: 1, background: "#B8965A", margin: "0 auto 40px", opacity: 0.4 }} />
-
                   {/* Section label */}
                   <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A", textAlign: "center", marginBottom: 24, opacity: 0.85 }}>
                     WHAT BRINGS YOU TO TIME BRIDGE?
