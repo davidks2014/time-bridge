@@ -13,7 +13,7 @@ export async function GET() {
 
     const me = await prisma.user.findUnique({
       where: { email: session.user.email.toLowerCase() },
-      select: { id: true },
+      select: { id: true, storageUsedMB: true, storageLimitMB: true },
     });
 
     if (!me) return Response.json({ error: "Not found." }, { status: 404 });
@@ -24,7 +24,15 @@ export async function GET() {
       prisma.receiver.count({ where: { ownerId: me.id, collections: { some: {} } } }),
     ]);
 
-    return Response.json({ stats: { totalMemories, releasedMemories, totalReceivers } });
+    return Response.json({
+      stats: {
+        totalMemories,
+        releasedMemories,
+        totalReceivers,
+        storageUsedMB: me.storageUsedMB,
+        storageLimitMB: me.storageLimitMB,
+      },
+    });
   } catch (err) {
     console.error("GET /api/dashboard/stats error:", err);
     return Response.json({ error: "Server error." }, { status: 500 });

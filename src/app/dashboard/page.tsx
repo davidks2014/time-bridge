@@ -32,6 +32,8 @@ type DashboardStats = {
   totalMemories: number;
   releasedMemories: number;
   totalReceivers: number;
+  storageUsedMB: number;
+  storageLimitMB: number;
 };
 
 // ── Helper ────────────────────────────────────────────────────────────────────
@@ -121,8 +123,11 @@ export default function DashboardPage() {
     return <TimeBridgeLoading message="Loading your memories..." />;
   }
 
-  const proofInfo = getProofStatus(proofStage);
-  const firstName = userName.split(" ")[0];
+  const proofInfo  = getProofStatus(proofStage);
+  const firstName  = userName.split(" ")[0];
+  const storagePct = stats
+    ? Math.min((stats.storageUsedMB / stats.storageLimitMB) * 100, 100)
+    : 0;
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -259,6 +264,75 @@ export default function DashboardPage() {
             </button>
           )}
         </div>
+
+        {/* ── Storage warning banner (danger: full) ── */}
+        {stats && storagePct >= 100 && (
+          <div className="tb-banner tb-fade-in tb-stagger-2" style={{
+            marginBottom: 20,
+            background: "#FEF2F2",
+            border: "1px solid #FECACA",
+            borderRadius: "var(--radius-md)",
+            padding: "14px 18px",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 12,
+          }}>
+            <div className="tb-banner-dot" style={{ background: "#DC2626", marginTop: 4, flexShrink: 0 }} />
+            <div style={{ flex: 1 }}>
+              <span style={{ color: "#7F1D1D", fontSize: 13 }}>
+                Your storage is full ({stats.storageLimitMB} MB used). You cannot upload new files. Please delete some memories or upgrade your plan.
+              </span>
+              <div style={{ marginTop: 8 }}>
+                <button
+                  onClick={() => router.push("/profile")}
+                  style={{
+                    background: "#DC2626",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "var(--radius-sm)",
+                    padding: "6px 14px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  Upgrade storage
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Storage warning banner (warning: 80–99%) ── */}
+        {stats && storagePct >= 80 && storagePct < 100 && (
+          <div className="tb-banner tb-banner-gold tb-fade-in tb-stagger-2" style={{ marginBottom: 20 }}>
+            <div className="tb-banner-dot tb-banner-dot-gold" />
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: 13 }}>
+                You are using {storagePct.toFixed(1)}% of your storage ({stats.storageUsedMB.toFixed(2)} MB of {stats.storageLimitMB} MB). Consider upgrading your plan to avoid losing access.
+              </span>
+              <div style={{ marginTop: 8 }}>
+                <button
+                  onClick={() => router.push("/profile")}
+                  style={{
+                    background: "transparent",
+                    color: "var(--gold)",
+                    border: "1px solid var(--gold)",
+                    borderRadius: "var(--radius-sm)",
+                    padding: "6px 14px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  Upgrade storage
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Stats ── */}
         {stats && (
