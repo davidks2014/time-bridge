@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     const { priceId } = body;
 
     // Validate priceId is one of our known plans
-    const validPriceIds = [process.env.STRIPE_PLUS_PRICE_ID, process.env.STRIPE_PREMIUM_PRICE_ID];
+    const validPriceIds = ["price_1TRuZyE4BN2ZuVDKdGYxy5Ei", "price_1TRudjE4BN2ZuVDK1cF5GyFt"];
     if (!priceId || !validPriceIds.includes(priceId)) {
       return Response.json({ error: "Invalid plan selected." }, { status: 400 });
     }
