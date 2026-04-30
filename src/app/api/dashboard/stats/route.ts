@@ -21,7 +21,7 @@ export async function GET() {
     const [totalMemories, releasedMemories, totalReceivers] = await Promise.all([
       prisma.memoryItem.count({ where: { ownerId: me.id } }),
       prisma.memoryItem.count({ where: { ownerId: me.id, status: "RELEASED" } }),
-      prisma.receiver.count({ where: { ownerId: me.id } }),
+      prisma.receiver.count({ where: { ownerId: me.id, collections: { some: {} } } }),
     ]);
 
     return Response.json({ stats: { totalMemories, releasedMemories, totalReceivers } });
