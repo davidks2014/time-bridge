@@ -82,8 +82,8 @@ export default function OnboardingPage() {
                   accentColor: "#B8965A",
                   iconBg: "rgba(184,150,90,0.1)",
                   selClass: "sel-gold",
-                  title: "Capture a moment",
-                  body: "Preserve the memories that matter and share them with the people I love, now or in the future.",
+                  title: "Schedule a memory",
+                  body: "Write a message, add photos or videos, and choose when someone special receives it.",
                   icon: (
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#B8965A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
@@ -159,7 +159,7 @@ export default function OnboardingPage() {
                 }}
               >
                 {wizardSelection
-                  ? `Begin — ${{ planner: "Protect my family", parent: "A letter to my child", keeper: "Capture a moment" }[wizardSelection]} →`
+                  ? `Begin — ${{ planner: "Protect my family", parent: "A letter to my child", keeper: "Schedule a memory" }[wizardSelection]} →`
                   : "Choose how to begin"}
               </button>
               <div style={{ marginTop: 12, fontSize: 13, color: "rgba(184,150,90,0.65)", letterSpacing: "0.04em" }}>
@@ -276,8 +276,8 @@ export default function OnboardingPage() {
                         <circle cx="12" cy="13" r="4"/>
                       </svg>
                     ),
-                    heading: "Every moment deserves to be preserved.",
-                    body: "Holidays, birthdays, ordinary Tuesdays — the moments that make up a life. Time Bridge keeps them safe and delivers them to the people who matter most.",
+                    heading: "Every memory deserves to be shared.",
+                    body: "Write a message, attach photos or videos, choose a recipient, and decide when they receive it — now or at a future date you choose.",
                   },
                   {
                     stepLabel: "HOW IT WORKS",
@@ -296,8 +296,8 @@ export default function OnboardingPage() {
                         <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
                       </svg>
                     ),
-                    heading: "The people you love deserve these moments.",
-                    body: "Add family members as recipients and let them receive your memories. Build a living archive of moments your loved ones can cherish for generations.",
+                    heading: "You are in control of every delivery.",
+                    body: "Set a release date or let proof-of-life decide. Edit anytime. Your recipient receives exactly what you want, when you want.",
                   },
                 ],
               };
