@@ -66,6 +66,7 @@ export default function DashboardPage() {
   const [stats, setStats]         = useState<DashboardStats | null>(null);
   const [loading, setLoading]     = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showSegmentPicker, setShowSegmentPicker] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [confirmMsg, setConfirmMsg] = useState("");
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
@@ -148,6 +149,156 @@ export default function DashboardPage() {
             loadDashboard();
           }}
         />
+      )}
+
+      {/* Segment Picker Modal */}
+      {showSegmentPicker && (
+        <div
+          onClick={() => setShowSegmentPicker(false)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(44,24,16,0.4)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            zIndex: 1000, padding: 24,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#FAF7F2", borderRadius: 20, padding: "40px 32px",
+              maxWidth: 760, width: "100%", position: "relative",
+            }}
+          >
+            {/* Close */}
+            <button
+              onClick={() => setShowSegmentPicker(false)}
+              style={{
+                position: "absolute", top: 16, right: 20, background: "none",
+                border: "none", fontSize: 22, color: "#B8965A", cursor: "pointer",
+                lineHeight: 1,
+              }}
+            >
+              ×
+            </button>
+
+            {/* Label */}
+            <div style={{
+              fontSize: 11, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A",
+              textAlign: "center", marginBottom: 28, textTransform: "uppercase",
+            }}>
+              WHAT WOULD YOU LIKE TO CREATE?
+            </div>
+
+            {/* Cards */}
+            <style>{`
+              .tb-seg-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+              @media (max-width: 600px) { .tb-seg-cards { grid-template-columns: 1fr !important; } }
+            `}</style>
+            <div className="tb-seg-cards">
+              {([
+                {
+                  key: "planner",
+                  accentColor: "#B8965A",
+                  iconBg: "rgba(184,150,90,0.1)",
+                  num: "01",
+                  title: "Protect my family",
+                  body: "Make sure they know everything I have prepared — my insurance, assets, and the words I want them to receive.",
+                  icon: (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#B8965A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                  ),
+                  action: () => { setShowSegmentPicker(false); router.push("/milestone?segment=planner"); },
+                },
+                {
+                  key: "parent",
+                  accentColor: "#7C9A7E",
+                  iconBg: "rgba(124,154,126,0.1)",
+                  num: "02",
+                  title: "A letter to my child",
+                  body: "Deliver my love at exactly the right moment — their 18th birthday, graduation day, or wedding.",
+                  icon: (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#7C9A7E" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+                    </svg>
+                  ),
+                  action: () => { setShowSegmentPicker(false); router.push("/milestone"); },
+                },
+                {
+                  key: "keeper",
+                  accentColor: "#B8965A",
+                  iconBg: "rgba(184,150,90,0.1)",
+                  num: "03",
+                  title: "Capture a moment",
+                  body: "Preserve the memories that matter and share them with the people I love, now or in the future.",
+                  icon: (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#B8965A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                      <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                  ),
+                  action: () => { setShowSegmentPicker(false); setShowModal(true); },
+                },
+              ] as const).map((card) => (
+                <div
+                  key={card.key}
+                  onClick={card.action}
+                  style={{
+                    background: "#fff", border: "1px solid rgba(184,150,90,0.2)", borderRadius: 20,
+                    padding: "40px 28px 32px", display: "flex", flexDirection: "column",
+                    alignItems: "center", textAlign: "center", cursor: "pointer",
+                    transition: "border-color 220ms ease, transform 180ms ease", position: "relative", overflow: "hidden",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "rgba(184,150,90,0.5)";
+                    e.currentTarget.style.transform = "translateY(-3px)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "rgba(184,150,90,0.2)";
+                    e.currentTarget.style.transform = "translateY(0)";
+                  }}
+                >
+                  {/* Top accent bar */}
+                  <div style={{
+                    position: "absolute", top: 0, left: 0, right: 0, height: 3,
+                    borderRadius: "20px 20px 0 0", background: card.accentColor,
+                  }} />
+
+                  {/* Icon */}
+                  <div style={{
+                    width: 56, height: 56, borderRadius: 16, background: card.iconBg,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    marginBottom: 18, flexShrink: 0,
+                  }}>
+                    {card.icon}
+                  </div>
+
+                  {/* Number */}
+                  <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.16em", color: "rgba(184,150,90,0.4)", marginBottom: 10 }}>
+                    {card.num}
+                  </div>
+
+                  {/* Title */}
+                  <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 26, fontWeight: 600, color: "#2C1810", lineHeight: 1.2, marginBottom: 12 }}>
+                    {card.title}
+                  </div>
+
+                  {/* Body */}
+                  <div style={{ fontSize: 15, color: "#9A8878", lineHeight: 1.85, flex: 1 }}>
+                    {card.body}
+                  </div>
+
+                  {/* Arrow footer */}
+                  <div style={{
+                    marginTop: 24, paddingTop: 18, borderTop: "1px solid rgba(184,150,90,0.12)",
+                    width: "100%", display: "flex", alignItems: "center", justifyContent: "flex-end",
+                  }}>
+                    <span style={{ fontSize: 18, color: card.accentColor, fontWeight: 400 }}>→</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       <div className="tb-container" style={{ paddingTop: 32, paddingBottom: 48 }}>
@@ -364,7 +515,7 @@ export default function DashboardPage() {
         {/* ── Create memory button (returning users only) ── */}
         {memories.length > 0 && <button
           className="tb-fade-in tb-stagger-4"
-          onClick={() => setShowModal(true)}
+          onClick={() => setShowSegmentPicker(true)}
           disabled={!isApproved}
           title={!isApproved ? "Account verification required" : undefined}
           style={{

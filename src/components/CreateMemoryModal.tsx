@@ -80,16 +80,27 @@ function Steps({ current }: { current: number }) {
 type Props = {
   onClose: () => void;
   onSuccess: () => void;
+  initialCollectionTitle?: string;
+  initialItemTitle?: string;
+  initialReleaseDate?: string; // format: "YYYY-MM-DD"
+  initialReceiverName?: string;
 };
 
-export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
+export default function CreateMemoryModal({
+  onClose,
+  onSuccess,
+  initialCollectionTitle,
+  initialItemTitle,
+  initialReleaseDate,
+  initialReceiverName,
+}: Props) {
   const [step, setStep] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Step 1 — Memory content
-  const [collectionTitle, setCollectionTitle] = useState("");
-  const [itemTitle, setItemTitle]             = useState("");
+  const [collectionTitle, setCollectionTitle] = useState(initialCollectionTitle ?? "");
+  const [itemTitle, setItemTitle]             = useState(initialItemTitle ?? "");
   const [itemContent, setItemContent]         = useState("");
   const [attachments, setAttachments]         = useState<Attachment[]>([]);
   const [uploading, setUploading]             = useState(false);
@@ -98,11 +109,13 @@ export default function CreateMemoryModal({ onClose, onSuccess }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Step 2 — Receivers
-  const [receivers, setReceivers] = useState<Receiver[]>([emptyReceiver()]);
+  const [receivers, setReceivers] = useState<Receiver[]>(
+    initialReceiverName ? [{ ...emptyReceiver(), name: initialReceiverName }] : [emptyReceiver()]
+  );
 
   // Step 3 — Release
   const [releaseMode, setReleaseMode] = useState<"PROOF" | "DATE">("PROOF");
-  const [releaseDate, setReleaseDate] = useState("");
+  const [releaseDate, setReleaseDate] = useState(initialReleaseDate ?? "");
   const [releaseTime, setReleaseTime] = useState("08:00");
 
   function updateReceiver(idx: number, field: string, value: string) {
