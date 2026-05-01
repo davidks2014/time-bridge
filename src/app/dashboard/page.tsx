@@ -529,7 +529,17 @@ export default function DashboardPage() {
                   {/* CTA button */}
                   <div style={{ marginTop: 32, textAlign: "center" }}>
                     <button
-                      onClick={() => { if (wizardSelection) setWizardStep(2); }}
+                      onClick={() => {
+                        if (wizardSelection) {
+                          if (!profileComplete) {
+                            setWizardStep(2);
+                          } else if (!isApproved) {
+                            setWizardStep(2);
+                          } else {
+                            setWizardStep(2);
+                          }
+                        }
+                      }}
                       disabled={!wizardSelection}
                       style={{
                         background: "#2C1810",
@@ -558,6 +568,95 @@ export default function DashboardPage() {
                   </div>
                 </>
               ) : (
+                !profileComplete ? (
+                  <div style={{ maxWidth: 560, margin: "0 auto", padding: "48px 0", textAlign: "center" }}>
+                    <button onClick={() => setWizardStep(1)} style={{ fontSize: 13, color: "#B8965A", background: "none", border: "none", cursor: "pointer", fontWeight: 600, marginBottom: 32, display: "block" }}>← Back</button>
+                    <div style={{ width: 80, height: 80, borderRadius: 20, background: "rgba(184,150,90,0.1)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#B8965A" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                        <circle cx="12" cy="7" r="4"/>
+                      </svg>
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A", marginBottom: 16 }}>ONE MORE STEP BEFORE YOU BEGIN</div>
+                    <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 34, fontWeight: 400, color: "#2C1810", lineHeight: 1.25, marginBottom: 16 }}>Complete your profile to start creating memories.</div>
+                    <div style={{ fontSize: 16, color: "#888", lineHeight: 1.85, fontWeight: 300, maxWidth: 440, margin: "0 auto 28px" }}>Time Bridge is built on trust. Before you can create and deliver memories to your loved ones, we need to verify who you are.</div>
+                    <div style={{ background: "#fff", border: "1px solid rgba(184,150,90,0.2)", borderRadius: 16, padding: "24px 28px", margin: "0 auto 28px", maxWidth: 480, textAlign: "left" }}>
+                      {[
+                        {
+                          icon: (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B8965A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>),
+                          title: "Protect your recipients",
+                          subtitle: "Verification ensures only real, verified people can send memories. Your family deserves to know the messages they receive are genuinely from you.",
+                        },
+                        {
+                          icon: (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B8965A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>),
+                          title: "Keep your memories safe",
+                          subtitle: "Your NRIC is used for identity verification only. It is encrypted and never shared with anyone — including your recipients.",
+                        },
+                        {
+                          icon: (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B8965A" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9,12 11,14 15,10"/></svg>),
+                          title: "PDPA compliant",
+                          subtitle: "Time Bridge is fully compliant with Singapore's Personal Data Protection Act. Your data is yours — always.",
+                        },
+                      ].map((row, i, arr) => (
+                        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: i < arr.length - 1 ? 16 : 0 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(184,150,90,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            {row.icon}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: "#2C1810", marginBottom: 4 }}>{row.title}</div>
+                            <div style={{ fontSize: 12, color: "#aaa", lineHeight: 1.6 }}>{row.subtitle}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => router.push("/complete-profile")} style={{ width: "100%", maxWidth: 440, background: "#2C1810", color: "#FAF7F2", border: "none", borderRadius: 10, padding: "16px", fontSize: 15, fontWeight: 700, cursor: "pointer", letterSpacing: "0.06em" }}>Complete my profile →</button>
+                    <div style={{ fontSize: 12, color: "rgba(184,150,90,0.65)", marginTop: 12 }}>Takes less than 2 minutes · Your information is encrypted and secure</div>
+                  </div>
+                ) : !isApproved ? (
+                  <div style={{ maxWidth: 560, margin: "0 auto", padding: "48px 0", textAlign: "center" }}>
+                    <style>{`@keyframes tb-pulse-badge { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
+                    <button onClick={() => setWizardStep(1)} style={{ fontSize: 13, color: "#B8965A", background: "none", border: "none", cursor: "pointer", fontWeight: 600, marginBottom: 32, display: "block" }}>← Back</button>
+                    <div style={{ width: 80, height: 80, borderRadius: 20, background: "rgba(124,154,126,0.12)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#7C9A7E" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10"/>
+                        <polyline points="12,6 12,12 16,14"/>
+                      </svg>
+                    </div>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(124,154,126,0.12)", border: "1px solid rgba(124,154,126,0.3)", borderRadius: 20, padding: "8px 16px", marginBottom: 24 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#7C9A7E", animation: "tb-pulse-badge 2s ease-in-out infinite" }} />
+                      <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", color: "#7C9A7E" }}>VERIFICATION IN PROGRESS</span>
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A", marginBottom: 16 }}>YOUR PROFILE IS BEING REVIEWED</div>
+                    <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 34, fontWeight: 400, color: "#2C1810", lineHeight: 1.25, marginBottom: 16 }}>You are almost there.</div>
+                    <div style={{ fontSize: 16, color: "#888", lineHeight: 1.85, fontWeight: 300, maxWidth: 440, margin: "0 auto 28px" }}>Our team is reviewing your verification documents. This usually takes less than 24 hours. We will notify you by email once approved.</div>
+                    <div style={{ background: "#fff", border: "1px solid rgba(124,154,126,0.2)", borderRadius: 16, padding: "24px 28px", margin: "0 auto 28px", maxWidth: 480, textAlign: "left" }}>
+                      {[
+                        {
+                          icon: (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7C9A7E" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.6 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.09 6.09l.86-1.35a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 15z"/></svg>),
+                          title: "What happens next?",
+                          subtitle: "Once approved, you will receive an email and can immediately start creating memories for your loved ones.",
+                        },
+                        {
+                          icon: (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7C9A7E" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>),
+                          title: "Check your email",
+                          subtitle: "We will send a notification to your registered email address the moment your account is approved.",
+                        },
+                      ].map((row, i, arr) => (
+                        <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: i < arr.length - 1 ? 16 : 0 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(124,154,126,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            {row.icon}
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: "#2C1810", marginBottom: 4 }}>{row.title}</div>
+                            <div style={{ fontSize: 12, color: "#aaa", lineHeight: 1.6 }}>{row.subtitle}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => router.push("/pending-verification")} style={{ width: "100%", maxWidth: 440, background: "#7C9A7E", color: "#FAF7F2", border: "none", borderRadius: 10, padding: "16px", fontSize: 15, fontWeight: 700, cursor: "pointer", letterSpacing: "0.06em" }}>Check my verification status</button>
+                    <div style={{ fontSize: 12, color: "rgba(184,150,90,0.65)", marginTop: 12 }}>Most accounts are approved within 24 hours</div>
+                  </div>
+                ) : (
                 <div style={{ maxWidth: 640, margin: "0 auto", padding: "40px 0" }}>
                   {/* Progress dots */}
                   <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 48 }}>
@@ -780,6 +879,7 @@ export default function DashboardPage() {
                     );
                   })()}
                 </div>
+                )
               )}
             </div>
           ) : (
