@@ -68,9 +68,12 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/onboarding", req.url));
   }
 
-  // If profile complete but not yet approved, redirect to pending-verification
+  // If profile complete but not yet approved, only allow /pending-verification
   if (verificationStatus !== "APPROVED") {
-    return NextResponse.redirect(new URL("/pending-verification", req.url));
+    if (pathname !== "/pending-verification") {
+      return NextResponse.redirect(new URL("/pending-verification", req.url));
+    }
+    return NextResponse.next();
   }
 
   // ── STEP 7: APPROVED user — block admin and unverified-only pages ─────────
