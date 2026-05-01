@@ -183,6 +183,14 @@ MY FINAL WORDS
   const greeting    = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const timeOfDay   = hour < 12 ? "morning"      : hour < 17 ? "afternoon"      : "evening";
 
+  const nextDelivery = memories
+    .flatMap(m => m.items
+      .filter(item => item.status === "DRAFT" && item.releaseDate)
+      .map(item => ({ ...item, memoryTitle: m.title, receiverName: m.receiver.fullName }))
+    )
+    .sort((a, b) => new Date(a.releaseDate!).getTime() - new Date(b.releaseDate!).getTime())
+    .find(item => new Date(item.releaseDate!) > new Date());
+
   return (
     <div className="tb-page tb-page-with-tabs">
 
@@ -537,6 +545,40 @@ MY FINAL WORDS
             </div>
           </div>
         )}
+
+        {/* ── Next Delivery hero card ── */}
+        {memories.length > 0 && nextDelivery && (() => {
+          const releaseMs = new Date(nextDelivery.releaseDate!).getTime();
+          const totalDays = Math.ceil((releaseMs - Date.now()) / 86400000);
+          const pct = Math.min(100, Math.max(0, ((365 - totalDays) / 365) * 100));
+          const formattedRelease = new Date(nextDelivery.releaseDate!).toLocaleDateString("en-SG", { day: "numeric", month: "long", year: "numeric" });
+          return (
+            <div className="tb-fade-in tb-stagger-3" style={{
+              background: "#fff",
+              border: "1px solid rgba(184,150,90,0.2)",
+              borderLeft: "4px solid #B8965A",
+              borderRadius: 16,
+              padding: "20px 24px",
+              marginBottom: 20,
+            }}>
+              <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.16em", color: "#B8965A", marginBottom: 8 }}>
+                NEXT DELIVERY
+              </div>
+              <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 22, fontWeight: 600, color: "#2C1810", marginBottom: 4 }}>
+                {nextDelivery.memoryTitle}
+              </div>
+              <div style={{ fontSize: 13, color: "#888", marginBottom: 16 }}>
+                For {nextDelivery.receiverName} · Releases on {formattedRelease}
+              </div>
+              <div style={{ height: 4, background: "#E8D5B7", borderRadius: 4, overflow: "hidden", marginBottom: 8 }}>
+                <div style={{ width: `${pct}%`, height: "100%", background: "#B8965A", borderRadius: 4 }} />
+              </div>
+              <div style={{ fontSize: 12, color: "#B8965A", fontWeight: 700 }}>
+                {totalDays} days until delivery
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── Stats ── */}
         {memories.length > 0 && stats && (
