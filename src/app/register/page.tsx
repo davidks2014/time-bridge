@@ -47,7 +47,7 @@ export default function RegisterPage() {
       });
 
       if (signInRes?.ok) {
-        router.push("/complete-profile");
+        router.push("/onboarding");
       } else {
         router.push("/login");
       }
@@ -223,7 +223,7 @@ export default function RegisterPage() {
 
           {/* Google button */}
           <button
-            onClick={() => signIn("google", { callbackUrl: "/complete-profile" })}
+            onClick={() => signIn("google", { callbackUrl: "/onboarding" })}
             style={{
               width: "100%",
               background: "var(--ivory)",
