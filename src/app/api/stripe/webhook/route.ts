@@ -18,8 +18,6 @@ import Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
 
-// Required: disable Next.js body parsing so we get raw body for Stripe signature
-export const config = { api: { bodyParser: false } };
 
 export async function POST(req: Request) {
   const body = await req.text();
