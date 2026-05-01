@@ -191,91 +191,122 @@ export default function PendingVerificationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
-  if (status === "loading") return <div style={{ padding: 20 }}>Checking session...</div>;
+  if (status === "loading") return (
+    <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ width: 32, height: 32, borderRadius: "50%", border: "2px solid #E8D5B7", borderTopColor: "#B8965A", animation: "spin 0.8s linear infinite" }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+
+  const firstName = session?.user?.name?.split(" ")[0] ?? "friend";
 
   return (
-    <div style={{ padding: 20, maxWidth: 760, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 900 }}>Awaiting verification</h1>
+    <div style={{ background: "#FAF7F2", minHeight: "100vh", fontFamily: "Lato, sans-serif" }}>
+      <style>{`@keyframes tb-pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }`}</style>
+      <div style={{ maxWidth: 560, margin: "0 auto", padding: "60px 24px", textAlign: "center" }}>
 
-      <div style={{ marginTop: 10, color: "#666" }}>
-        Thank you for completing your profile. Our team is reviewing your
-        identity documents and will approve your account within 1 to 2
-        business days. You will receive an email once approved.
-      </div>
-
-      <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <button onClick={refresh} disabled={loading}>
-          {loading ? "Checking..." : "Refresh status"}
-        </button>
-
-        <button onClick={() => signOut({ callbackUrl: "/login" })}>Logout</button>
-      </div>
-
-      {verificationStatus === "PENDING" && (
-        <div
-          style={{
-            marginTop: 18,
-            border: "1px solid #dbeafe",
-            background: "#eff6ff",
-            borderRadius: 12,
-            padding: 14,
-          }}
-        >
-          <div style={{ fontWeight: 900 }}>Status: PENDING</div>
-          <div style={{ marginTop: 6, color: "#1e3a8a" }}>
-            Your verification is still pending admin review.
-          </div>
-        </div>
-      )}
-
-      {verificationStatus === "REJECTED" && (
-        <div
-          style={{
-            marginTop: 18,
-            border: "1px solid #fecaca",
-            background: "#fef2f2",
-            borderRadius: 12,
-            padding: 14,
-          }}
-        >
-          <div style={{ fontWeight: 900, color: "#991b1b" }}>Status: REJECTED</div>
-          <div style={{ marginTop: 8, color: "#7f1d1d" }}>
-            Reason: <b>{rejectReason || "N/A"}</b>
-          </div>
-
-          <div style={{ marginTop: 14, fontWeight: 900 }}>Re-upload Verification Documents</div>
-          <div style={{ marginTop: 6, color: "#666", fontSize: 13 }}>
-            Please upload corrected front and back images, then submit again for admin review.
-          </div>
-
-          <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-            <div>
-              <div style={{ fontWeight: 800, marginBottom: 6 }}>Front image *</div>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setIdFront(e.target.files?.[0] ?? null)}
-              />
+        {verificationStatus === "REJECTED" ? (
+          <>
+            {/* Icon */}
+            <div style={{ width: 80, height: 80, borderRadius: 20, background: "rgba(220,38,38,0.08)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>
+              </svg>
             </div>
 
-            <div>
-              <div style={{ fontWeight: 800, marginBottom: 6 }}>Back image (optional)</div>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setIdBack(e.target.files?.[0] ?? null)}
-              />
+            <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.18em", color: "#DC2626", marginBottom: 16 }}>VERIFICATION UNSUCCESSFUL</div>
+            <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 36, fontWeight: 400, color: "#2C1810", lineHeight: 1.25, marginBottom: 16 }}>Your verification was not approved.</div>
+
+            {/* Reject reason */}
+            <div style={{ background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: 12, padding: "16px 20px", margin: "0 auto 28px", maxWidth: 480, textAlign: "left" }}>
+              <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", color: "#DC2626", marginBottom: 8 }}>REASON FOR REJECTION</div>
+              <div style={{ fontSize: 14, color: "#2C1810", lineHeight: 1.6 }}>{rejectReason || "No reason provided."}</div>
             </div>
 
-            <button onClick={resubmitVerification} disabled={resubmitting}>
-              {resubmitting ? "Submitting..." : "Resubmit Verification"}
+            <div style={{ fontSize: 16, color: "#888", lineHeight: 1.7, fontWeight: 300, margin: "0 auto 28px", maxWidth: 440 }}>Please re-upload your verification documents.</div>
+
+            {/* Upload box */}
+            <div style={{ background: "#fff", border: "1px solid rgba(184,150,90,0.2)", borderRadius: 16, padding: "24px 28px", margin: "0 auto 24px", maxWidth: 480, textAlign: "left" }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: "#2C1810", marginBottom: 8, display: "block" }}>Front image *</label>
+              <div style={{ border: "1.5px dashed rgba(184,150,90,0.4)", borderRadius: 10, padding: "12px 16px", marginBottom: 20, background: "#FAF7F2" }}>
+                <input type="file" accept="image/*" style={{ width: "100%", fontSize: 13 }} onChange={(e) => setIdFront(e.target.files?.[0] ?? null)} />
+              </div>
+              <label style={{ fontSize: 13, fontWeight: 700, color: "#2C1810", marginBottom: 8, display: "block" }}>Back image (optional)</label>
+              <div style={{ border: "1.5px dashed rgba(184,150,90,0.4)", borderRadius: 10, padding: "12px 16px", background: "#FAF7F2" }}>
+                <input type="file" accept="image/*" style={{ width: "100%", fontSize: 13 }} onChange={(e) => setIdBack(e.target.files?.[0] ?? null)} />
+              </div>
+            </div>
+
+            <button
+              onClick={resubmitVerification}
+              disabled={resubmitting}
+              style={{ width: "100%", maxWidth: 440, background: "#2C1810", color: "#FAF7F2", border: "none", borderRadius: 10, padding: "16px", fontSize: 15, fontWeight: 700, cursor: resubmitting ? "not-allowed" : "pointer", opacity: resubmitting ? 0.7 : 1, letterSpacing: "0.06em" }}
+            >
+              {resubmitting ? "Submitting..." : "Resubmit for review →"}
             </button>
-          </div>
-        </div>
-      )}
+            <div style={{ fontSize: 12, color: "rgba(184,150,90,0.65)", marginTop: 12 }}>Make sure your NRIC is clearly visible and not blurry</div>
+            <button onClick={() => signOut({ callbackUrl: "/login" })} style={{ fontSize: 13, color: "#B8965A", background: "none", border: "none", cursor: "pointer", marginTop: 20, display: "block", fontWeight: 600, width: "100%" }}>Sign out</button>
+          </>
+        ) : (
+          <>
+            {/* Icon */}
+            <div style={{ width: 80, height: 80, borderRadius: 20, background: "rgba(124,154,126,0.12)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#7C9A7E" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/>
+              </svg>
+            </div>
 
-      {info && <div style={{ marginTop: 14, color: "green" }}>{info}</div>}
-      {error && <div style={{ marginTop: 14, color: "red" }}>{error}</div>}
+            {/* Pulsing badge */}
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(124,154,126,0.12)", border: "1px solid rgba(124,154,126,0.3)", borderRadius: 20, padding: "8px 16px", marginBottom: 24 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#7C9A7E", animation: "tb-pulse 2s ease-in-out infinite" }} />
+              <span style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.1em", color: "#7C9A7E" }}>VERIFICATION IN PROGRESS</span>
+            </div>
+
+            <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A", marginBottom: 16 }}>YOUR PROFILE IS BEING REVIEWED</div>
+            <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 36, fontWeight: 400, color: "#2C1810", lineHeight: 1.25, marginBottom: 16 }}>You are almost there, {firstName}.</div>
+            <div style={{ fontSize: 16, color: "#888", lineHeight: 1.85, fontWeight: 300, maxWidth: 440, margin: "0 auto 28px" }}>Our team is reviewing your verification documents. This usually takes less than 24 hours. We will notify you by email once approved.</div>
+
+            {/* Info box */}
+            <div style={{ background: "#fff", border: "1px solid rgba(184,150,90,0.2)", borderRadius: 16, padding: "24px 28px", margin: "0 auto 28px", maxWidth: 480, textAlign: "left" }}>
+              {[
+                {
+                  icon: (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7C9A7E" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.6 3.4 2 2 0 0 1 3.6 1.22h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 8.6a16 16 0 0 0 6.09 6.09l.86-1.35a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 15z"/></svg>),
+                  title: "What happens next?",
+                  subtitle: "Once approved, you will receive an email and can immediately start creating memories for your loved ones.",
+                },
+                {
+                  icon: (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7C9A7E" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>),
+                  title: "Check your email",
+                  subtitle: "We will send a notification to your registered email address the moment your account is approved.",
+                },
+              ].map((row, i, arr) => (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: i < arr.length - 1 ? 16 : 0 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(124,154,126,0.12)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {row.icon}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#2C1810", marginBottom: 4 }}>{row.title}</div>
+                    <div style={{ fontSize: 12, color: "#aaa", lineHeight: 1.6 }}>{row.subtitle}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={refresh}
+              disabled={loading}
+              style={{ width: "100%", maxWidth: 440, background: "#7C9A7E", color: "#FAF7F2", border: "none", borderRadius: 10, padding: "16px", fontSize: 15, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, letterSpacing: "0.06em" }}
+            >
+              {loading ? "Checking..." : "Check my verification status"}
+            </button>
+            <div style={{ fontSize: 12, color: "rgba(184,150,90,0.65)", marginTop: 12 }}>Most accounts are approved within 24 hours</div>
+            <button onClick={() => signOut({ callbackUrl: "/login" })} style={{ fontSize: 13, color: "#B8965A", background: "none", border: "none", cursor: "pointer", marginTop: 20, display: "block", fontWeight: 600, width: "100%" }}>Sign out</button>
+          </>
+        )}
+
+        {error && <div style={{ fontSize: 13, color: "#DC2626", marginTop: 16, textAlign: "center" }}>{error}</div>}
+        {info && <div style={{ fontSize: 13, color: "#7C9A7E", marginTop: 16, textAlign: "center" }}>{info}</div>}
+      </div>
     </div>
   );
 }
