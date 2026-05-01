@@ -67,6 +67,10 @@ export default function DashboardPage() {
   const [loading, setLoading]     = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [showSegmentPicker, setShowSegmentPicker] = useState(false);
+  const [modalInitialTitle, setModalInitialTitle] = useState("");
+  const [modalInitialItemTitle, setModalInitialItemTitle] = useState("");
+  const [modalInitialBody, setModalInitialBody] = useState("");
+  const [modalInitialReleaseDate, setModalInitialReleaseDate] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [confirmMsg, setConfirmMsg] = useState("");
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
@@ -123,6 +127,48 @@ export default function DashboardPage() {
     }
   }
 
+  function openProtectModal() {
+    setModalInitialTitle("My family's safety net");
+    setModalInitialItemTitle("Everything my family needs to know");
+    setModalInitialBody(
+`MY INSURANCE POLICIES
+──────────────────────
+Policy 1: [Insurance company] | [Policy number] | [Coverage type] | [Agent name & phone]
+Policy 2: [Add or remove as needed]
+
+MY CPF & BANK ACCOUNTS
+──────────────────────
+CPF: [Nominated beneficiaries] | [Approximate balance]
+Bank 1: [Bank name] | [Account type] | [Joint holder if any]
+
+MY PROPERTY & ASSETS
+──────────────────────
+Property: [Address] | [Ownership type] | [Outstanding loan if any]
+Vehicle: [Plate number] | [Insurance expiry]
+Other assets: [Describe any other assets]
+
+MY IMPORTANT CONTACTS
+──────────────────────
+Lawyer: [Name] | [Firm] | [Phone]
+Doctor: [Name] | [Clinic] | [Phone]
+Financial advisor: [Name] | [Company] | [Phone]
+
+MY FINAL WORDS
+──────────────────────
+[Write anything you want your family to know — your wishes, your love, and your guidance for them]`
+    );
+    setModalInitialReleaseDate("");
+    setShowModal(true);
+  }
+
+  function closeModal() {
+    setShowModal(false);
+    setModalInitialTitle("");
+    setModalInitialItemTitle("");
+    setModalInitialBody("");
+    setModalInitialReleaseDate("");
+  }
+
   if (status === "loading" || loading) {
     return <TimeBridgeLoading message="Loading your memories..." />;
   }
@@ -143,11 +189,12 @@ export default function DashboardPage() {
       {/* Create Memory Modal */}
       {showModal && (
         <CreateMemoryModal
-          onClose={() => setShowModal(false)}
-          onSuccess={() => {
-            setShowModal(false);
-            loadDashboard();
-          }}
+          onClose={closeModal}
+          onSuccess={() => { closeModal(); loadDashboard(); }}
+          initialCollectionTitle={modalInitialTitle}
+          initialItemTitle={modalInitialItemTitle}
+          initialContent={modalInitialBody}
+          initialReleaseDate={modalInitialReleaseDate}
         />
       )}
 
@@ -207,7 +254,7 @@ export default function DashboardPage() {
                       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                     </svg>
                   ),
-                  action: () => { setShowSegmentPicker(false); router.push("/milestone?segment=planner"); },
+                  action: () => { setShowSegmentPicker(false); openProtectModal(); },
                 },
                 {
                   key: "parent",
@@ -1023,7 +1070,7 @@ export default function DashboardPage() {
                                 if (wizardSelection === "parent") {
                                   router.push("/milestone");
                                 } else if (wizardSelection === "planner") {
-                                  router.push("/milestone?segment=planner");
+                                  openProtectModal();
                                 } else {
                                   setShowModal(true);
                                 }

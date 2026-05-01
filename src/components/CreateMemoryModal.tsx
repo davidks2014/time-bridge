@@ -82,6 +82,7 @@ type Props = {
   onSuccess: () => void;
   initialCollectionTitle?: string;
   initialItemTitle?: string;
+  initialContent?: string;
   initialReleaseDate?: string; // format: "YYYY-MM-DD"
   initialReceiverName?: string;
 };
@@ -91,6 +92,7 @@ export default function CreateMemoryModal({
   onSuccess,
   initialCollectionTitle,
   initialItemTitle,
+  initialContent,
   initialReleaseDate,
   initialReceiverName,
 }: Props) {
@@ -101,7 +103,7 @@ export default function CreateMemoryModal({
   // Step 1 — Memory content
   const [collectionTitle, setCollectionTitle] = useState(initialCollectionTitle ?? "");
   const [itemTitle, setItemTitle]             = useState(initialItemTitle ?? "");
-  const [itemContent, setItemContent]         = useState("");
+  const [itemContent, setItemContent]         = useState(initialContent ?? "");
   const [attachments, setAttachments]         = useState<Attachment[]>([]);
   const [uploading, setUploading]             = useState(false);
   const [uploadProgress, setUploadProgress]   = useState<number | null>(null);
