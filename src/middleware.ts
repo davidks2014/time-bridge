@@ -59,13 +59,13 @@ export async function middleware(req: NextRequest) {
 
   // ── STEP 5: Non-APPROVED users — limited to key pages ───────────────────
 
-  // If profile not complete, redirect to complete-profile
-  // This handles brand new users who registered but haven't submitted NRIC yet
+  // If profile not complete, allow /onboarding and /complete-profile only
+  // New users must go through onboarding wizard before completing their profile
   if (!profileComplete) {
-    if (pathname !== "/complete-profile") {
-      return NextResponse.redirect(new URL("/complete-profile", req.url));
+    if (pathname === "/onboarding" || pathname === "/complete-profile") {
+      return NextResponse.next();
     }
-    return NextResponse.next();
+    return NextResponse.redirect(new URL("/onboarding", req.url));
   }
 
   // If profile complete but not yet approved, redirect to pending-verification
@@ -77,7 +77,8 @@ export async function middleware(req: NextRequest) {
   if (
     pathname.startsWith("/admin") ||
     pathname === "/pending-verification" ||
-    pathname === "/complete-profile"
+    pathname === "/complete-profile" ||
+    pathname === "/onboarding"
   ) {
     return NextResponse.redirect(new URL("/dashboard", req.url));
   }
