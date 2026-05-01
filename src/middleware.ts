@@ -50,6 +50,7 @@ export async function middleware(req: NextRequest) {
   // ── STEP 3: Extract role and verificationStatus ───────────────────────────
   const role               = (token.role               as string | undefined) ?? "USER";
   const verificationStatus = (token.verificationStatus as string | undefined) ?? "PENDING";
+  const profileComplete    = (token.profileComplete    as boolean | undefined) ?? false;
 
   // ── STEP 4: ADMIN — allow everything ─────────────────────────────────────
   if (role === "ADMIN") {
@@ -57,10 +58,19 @@ export async function middleware(req: NextRequest) {
   }
 
   // ── STEP 5: Non-APPROVED users — limited to key pages ───────────────────
+
+  // If profile not complete, redirect to complete-profile
+  // This handles brand new users who registered but haven't submitted NRIC yet
+  if (!profileComplete) {
+    if (pathname !== "/complete-profile") {
+      return NextResponse.redirect(new URL("/complete-profile", req.url));
+    }
+    return NextResponse.next();
+  }
+
+  // If profile complete but not yet approved, redirect to pending-verification
   if (verificationStatus !== "APPROVED") {
-    const allowed = ["/dashboard", "/complete-profile", "/pending-verification"];
-    if (allowed.some((r) => pathname.startsWith(r))) return NextResponse.next();
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    return NextResponse.redirect(new URL("/pending-verification", req.url));
   }
 
   // ── STEP 7: APPROVED user — block admin and unverified-only pages ─────────
