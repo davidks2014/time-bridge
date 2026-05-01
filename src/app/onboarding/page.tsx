@@ -39,7 +39,7 @@ export default function OnboardingPage() {
             {/* Cards */}
             <style>{`
               .tb-wizard-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
-              @media (max-width: 600px) { .tb-wizard-cards { grid-template-columns: 1fr !important; } }
+              @media (max-width: 600px) { .tb-wizard-cards { grid-template-columns: 1fr !important; } .tb-wcard { padding: 28px 20px 24px !important; } }
               .tb-wcard { background: #fff; border: 1px solid rgba(184,150,90,0.2); border-radius: 20px; padding: 40px 28px 32px; display: flex; flex-direction: column; align-items: center; text-align: center; cursor: pointer; transition: border-color 220ms ease, background 220ms ease, transform 180ms ease; position: relative; overflow: hidden; }
               .tb-wcard:hover { transform: translateY(-3px); border-color: rgba(184,150,90,0.5); }
               .tb-wcard.sel-gold { background: #FAF7F2; border: 1.5px solid #B8965A; }
@@ -159,7 +159,7 @@ export default function OnboardingPage() {
                 }}
               >
                 {wizardSelection
-                  ? `Begin — ${{ planner: "Protect my family", parent: "A letter to my child", keeper: "Schedule a memory" }[wizardSelection]} →`
+                  ? `Begin →`
                   : "Choose how to begin"}
               </button>
               <div style={{ marginTop: 12, fontSize: 13, color: "rgba(184,150,90,0.65)", letterSpacing: "0.04em" }}>
@@ -341,14 +341,14 @@ export default function OnboardingPage() {
                                 {howItWorksIcons[si]}
                               </div>
                               <div style={{ fontSize: 13, fontWeight: 700, color: "#2C1810", textAlign: "center" }}>{step}</div>
-                              <div style={{ fontSize: 12, color: "#aaa", textAlign: "center", marginTop: 3 }}>{slide.sublabels?.[si]}</div>
+                              <div style={{ fontSize: 12, color: "#aaa", textAlign: "center", marginTop: 3, maxWidth: 80, wordBreak: "break-word" }}>{slide.sublabels?.[si]}</div>
                             </div>
                             {si < 2 && <div key={`arrow-${si}`} style={{ color: "rgba(184,150,90,0.4)", fontSize: 20, flexShrink: 0, marginBottom: 32 }}>→</div>}
                           </>
                         ))}
                       </div>
                       <div style={{ fontSize: 13, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A", textAlign: "center", marginBottom: 16, textTransform: "uppercase" }}>{slide.stepLabel}</div>
-                      <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 36, fontWeight: 400, color: "#2C1810", textAlign: "center", lineHeight: 1.25, marginBottom: 16 }}>{slide.heading}</div>
+                      <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: "clamp(26px, 5vw, 36px)", fontWeight: 400, color: "#2C1810", textAlign: "center", lineHeight: 1.25, marginBottom: 16 }}>{slide.heading}</div>
                       <div style={{ fontSize: 17, color: "#888", lineHeight: 1.85, textAlign: "center", maxWidth: 480, margin: "0 auto 40px", fontWeight: 300 }}>{slide.body}</div>
                     </>
                   ) : (
@@ -357,7 +357,7 @@ export default function OnboardingPage() {
                         {slide.icon}
                       </div>
                       <div style={{ fontSize: 13, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A", textAlign: "center", marginBottom: 16, textTransform: "uppercase" }}>{slide.stepLabel}</div>
-                      <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 36, fontWeight: 400, color: "#2C1810", textAlign: "center", lineHeight: 1.25, marginBottom: 16 }}>{slide.heading}</div>
+                      <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: "clamp(26px, 5vw, 36px)", fontWeight: 400, color: "#2C1810", textAlign: "center", lineHeight: 1.25, marginBottom: 16 }}>{slide.heading}</div>
                       <div style={{ fontSize: 17, color: "#888", lineHeight: 1.85, textAlign: "center", maxWidth: 480, margin: "0 auto 40px", fontWeight: 300 }}>{slide.body}</div>
                     </>
                   )}

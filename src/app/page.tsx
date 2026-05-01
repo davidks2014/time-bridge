@@ -23,7 +23,7 @@ export default function LandingPage() {
       {/* ── NAV ── */}
       <nav style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "20px 40px", borderBottom: "1px solid rgba(184,150,90,0.15)",
+        padding: "20px clamp(16px, 5vw, 40px)", borderBottom: "1px solid rgba(184,150,90,0.15)",
         background: "#FAF7F2", position: "sticky", top: 0, zIndex: 50,
       }}>
         <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 20, fontWeight: 600, color: "#2C1810", letterSpacing: "0.04em" }}>
@@ -40,7 +40,7 @@ export default function LandingPage() {
       </nav>
 
       {/* ── HERO ── */}
-      <section style={{ padding: "80px 40px 72px", textAlign: "center" }}>
+      <section style={{ padding: "clamp(48px, 8vw, 80px) clamp(16px, 5vw, 40px) clamp(48px, 8vw, 72px)", textAlign: "center" }}>
         <div style={{ display: "inline-block", background: "rgba(184,150,90,0.12)", border: "1px solid rgba(184,150,90,0.3)", borderRadius: 20, padding: "6px 16px", fontSize: 11, fontWeight: 900, letterSpacing: "0.16em", color: "#B8965A", marginBottom: 28 }}>
           SINGAPORE&apos;S LOVE DELIVERY PLATFORM
         </div>
@@ -65,7 +65,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── TRUST BAR ── */}
-      <div style={{ background: "#2C1810", padding: "20px 40px", display: "flex", alignItems: "center", justifyContent: "center", gap: 48, flexWrap: "wrap" }}>
+      <div style={{ background: "#2C1810", padding: "20px clamp(16px, 5vw, 40px)", display: "flex", alignItems: "center", justifyContent: "center", gap: 48, flexWrap: "wrap" }}>
         {["PDPA COMPLIANT", "STORED IN SINGAPORE", "END-TO-END SECURE", "FREE TO START"].map((item) => (
           <div key={item} style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#B8965A", flexShrink: 0 }} />
@@ -75,7 +75,7 @@ export default function LandingPage() {
       </div>
 
       {/* ── WHO IT'S FOR ── */}
-      <section style={{ padding: "72px 40px" }}>
+      <section style={{ padding: "clamp(48px, 8vw, 72px) clamp(16px, 5vw, 40px)" }}>
         <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.2em", color: "#B8965A", textAlign: "center", marginBottom: 12 }}>WHO IT&apos;S FOR</div>
         <h2 style={{ fontFamily: "Cormorant Garamond, serif", fontSize: "clamp(28px, 4vw, 42px)", fontWeight: 400, color: "#2C1810", textAlign: "center", marginBottom: 48, lineHeight: 1.25 }}>
           Built for people who love deeply<br />and plan ahead.
@@ -113,7 +113,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── HOW IT WORKS ── */}
-      <section id="how-it-works" style={{ background: "#2C1810", padding: "72px 40px", textAlign: "center" }}>
+      <section id="how-it-works" style={{ background: "#2C1810", padding: "clamp(48px, 8vw, 72px) clamp(16px, 5vw, 40px)", textAlign: "center" }}>
         <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.2em", color: "rgba(184,150,90,0.7)", marginBottom: 12 }}>HOW IT WORKS</div>
         <h2 style={{ fontFamily: "Cormorant Garamond, serif", fontSize: "clamp(28px, 4vw, 42px)", fontWeight: 400, color: "#FAF7F2", marginBottom: 56, lineHeight: 1.25 }}>
           Simple. Secure. Delivered<br />at exactly the right moment.
@@ -139,7 +139,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── 3 PILLARS ── */}
-      <section style={{ padding: "72px 40px" }}>
+      <section style={{ padding: "clamp(48px, 8vw, 72px) clamp(16px, 5vw, 40px)" }}>
         <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.2em", color: "#B8965A", textAlign: "center", marginBottom: 12 }}>WHAT YOU CAN DO</div>
         <h2 style={{ fontFamily: "Cormorant Garamond, serif", fontSize: "clamp(28px, 4vw, 42px)", fontWeight: 400, color: "#2C1810", textAlign: "center", marginBottom: 48, lineHeight: 1.25 }}>
           Three ways to deliver your love.
@@ -174,7 +174,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── PRICING ── */}
-      <section style={{ background: "#F5F0E8", padding: "72px 40px" }}>
+      <section style={{ background: "#F5F0E8", padding: "clamp(48px, 8vw, 72px) clamp(16px, 5vw, 40px)" }}>
         <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.2em", color: "#B8965A", textAlign: "center", marginBottom: 12 }}>PRICING</div>
         <h2 style={{ fontFamily: "Cormorant Garamond, serif", fontSize: "clamp(28px, 4vw, 42px)", fontWeight: 400, color: "#2C1810", textAlign: "center", marginBottom: 48, lineHeight: 1.25 }}>
           Start free. Grow when you&apos;re ready.

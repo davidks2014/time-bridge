@@ -171,7 +171,7 @@ export default function MilestonePage() {
             <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A", textTransform: "uppercase", marginBottom: 16 }}>
               A LETTER TO MY CHILD — STEP 1 OF 3
             </div>
-            <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 36, fontWeight: 400, color: "#2C1810", lineHeight: 1.25, marginBottom: 12 }}>
+            <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: "clamp(26px, 5vw, 36px)", fontWeight: 400, color: "#2C1810", lineHeight: 1.25, marginBottom: 12 }}>
               Who is this letter for?
             </div>
             <div style={{ fontSize: 15, color: "#888", lineHeight: 1.7, fontWeight: 300, marginBottom: 36 }}>
@@ -219,7 +219,7 @@ export default function MilestonePage() {
             <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A", textTransform: "uppercase", marginBottom: 16 }}>
               A LETTER TO MY CHILD — STEP 2 OF 3
             </div>
-            <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 36, fontWeight: 400, color: "#2C1810", lineHeight: 1.25, marginBottom: 12 }}>
+            <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: "clamp(26px, 5vw, 36px)", fontWeight: 400, color: "#2C1810", lineHeight: 1.25, marginBottom: 12 }}>
               When should {firstName} receive this?
             </div>
             <div style={{ fontSize: 15, color: "#888", lineHeight: 1.7, fontWeight: 300, marginBottom: 36 }}>
@@ -295,7 +295,7 @@ export default function MilestonePage() {
             <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.18em", color: "#B8965A", textTransform: "uppercase", marginBottom: 16 }}>
               A LETTER TO MY CHILD — STEP 3 OF 3
             </div>
-            <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 36, fontWeight: 400, color: "#2C1810", lineHeight: 1.25, marginBottom: 12 }}>
+            <div style={{ fontFamily: "Cormorant Garamond, serif", fontSize: "clamp(26px, 5vw, 36px)", fontWeight: 400, color: "#2C1810", lineHeight: 1.25, marginBottom: 12 }}>
               You are ready to write your letter.
             </div>
             <div style={{ fontSize: 15, color: "#888", lineHeight: 1.7, fontWeight: 300, marginBottom: 36 }}>
