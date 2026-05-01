@@ -1019,10 +1019,22 @@ export default function DashboardPage() {
                             </button>
                           ) : (
                             <button
-                              onClick={() => setShowModal(true)}
+                              onClick={() => {
+                                if (wizardSelection === "parent") {
+                                  router.push("/milestone");
+                                } else if (wizardSelection === "planner") {
+                                  router.push("/milestone?segment=planner");
+                                } else {
+                                  setShowModal(true);
+                                }
+                              }}
                               style={{ background: "#B8965A", color: "#FAF7F2", border: "none", borderRadius: 10, padding: "14px 40px", fontSize: 15, fontWeight: 700, cursor: "pointer", letterSpacing: "0.04em" }}
                             >
-                              Let's create my first memory →
+                              {wizardSelection === "parent"
+                                ? "Write my first letter →"
+                                : wizardSelection === "planner"
+                                ? "Create my family's safety net →"
+                                : "Let's create my first memory →"}
                             </button>
                           )}
                         </div>
