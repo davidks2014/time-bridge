@@ -116,9 +116,10 @@ export default function CreateMemoryModal({
   );
 
   // Step 3 — Release
-  const [releaseMode, setReleaseMode] = useState<"PROOF" | "DATE">("PROOF");
+  const [releaseMode, setReleaseMode] = useState<"PROOF" | "DATE" | "NOW">("PROOF");
   const [releaseDate, setReleaseDate] = useState(initialReleaseDate ?? "");
   const [releaseTime, setReleaseTime] = useState("08:00");
+  const [showConfirm, setShowConfirm] = useState(false);
 
   function updateReceiver(idx: number, field: string, value: string) {
     setReceivers((prev) => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
@@ -321,6 +322,47 @@ export default function CreateMemoryModal({
         return;
       }
 
+      onSuccess();
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submitNow() {
+    setError("");
+    setLoading(true);
+    setShowConfirm(false);
+    try {
+      const res = await fetch("/api/memory/release-now", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          collectionTitle: collectionTitle.trim(),
+          itemTitle: itemTitle.trim(),
+          itemContent: itemContent.trim(),
+          attachments,
+          receivers: receivers.map((r) => ({
+            fullName: r.name.trim(),
+            email: r.email.trim() || null,
+            phone: r.phone.trim() || null,
+            address: r.address.trim(),
+            identificationNo: r.idNo.trim().toUpperCase(),
+            receiverType: r.receiverType,
+            guardianName: r.guardianName.trim() || null,
+            guardianNric: r.guardianNric.trim() || null,
+            guardianEmail: r.guardianEmail.trim() || null,
+            guardianPhone: r.guardianPhone.trim() || null,
+            guardianAddress: r.guardianAddress.trim() || null,
+          })),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.error ?? "Failed to send memory. Please try again.");
+        return;
+      }
       onSuccess();
     } catch {
       setError("Network error. Please try again.");
@@ -679,15 +721,27 @@ export default function CreateMemoryModal({
                       desc: "Released on a date and time you choose — regardless of your proof-of-life status.",
                       icon: "📅",
                     },
+                    {
+                      mode: "NOW" as const,
+                      title: "Deliver this message now",
+                      desc: "Your message will be sent immediately to your receiver. Cannot be undone after confirmation.",
+                      icon: "📜",
+                    },
                   ].map((opt) => (
                     <div
                       key={opt.mode}
                       onClick={() => setReleaseMode(opt.mode)}
                       style={{
                         padding: "16px 18px",
-                        border: `2px solid ${releaseMode === opt.mode ? "var(--gold)" : "var(--border-dark)"}`,
+                        border: `2px solid ${
+                          releaseMode === opt.mode
+                            ? opt.mode === "NOW" ? "#BA7517" : "var(--gold)"
+                            : "var(--border-dark)"
+                        }`,
                         borderRadius: "var(--radius-md)",
-                        background: releaseMode === opt.mode ? "var(--gold-pale)" : "var(--ivory)",
+                        background: releaseMode === opt.mode
+                          ? opt.mode === "NOW" ? "#FAEEDA" : "var(--gold-pale)"
+                          : "var(--ivory)",
                         cursor: "pointer",
                         transition: "all var(--transition)",
                         display: "flex",
@@ -697,7 +751,7 @@ export default function CreateMemoryModal({
                     >
                       <div style={{ fontSize: 24, flexShrink: 0 }}>{opt.icon}</div>
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 14, color: releaseMode === opt.mode ? "var(--gold)" : "var(--earth)", marginBottom: 4 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: releaseMode === opt.mode ? opt.mode === "NOW" ? "#854F0B" : "var(--gold)" : "var(--earth)", marginBottom: 4 }}>
                           {opt.title}
                         </div>
                         <div style={{ fontSize: 12, color: "var(--earth-muted)", lineHeight: 1.6 }}>
@@ -723,6 +777,23 @@ export default function CreateMemoryModal({
                   ))}
                 </div>
               </div>
+
+              {releaseMode === "NOW" && (
+                <div className="tb-fade-in" style={{
+                  background: "#FAEEDA",
+                  border: "1px solid #EF9F27",
+                  borderRadius: "var(--radius-md)",
+                  padding: "12px 16px",
+                  display: "flex",
+                  gap: 10,
+                  alignItems: "flex-start",
+                }}>
+                  <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+                  <span style={{ fontSize: 13, color: "#854F0B", lineHeight: 1.6 }}>
+                    This memory will be sent immediately. Your receiver will get an email with a claim link right away. You will have 24 hours to recall it if needed.
+                  </span>
+                </div>
+              )}
 
               {/* Date picker */}
               {releaseMode === "DATE" && (
@@ -765,6 +836,8 @@ export default function CreateMemoryModal({
                     <strong>Release:</strong>{" "}
                     {releaseMode === "PROOF"
                       ? "When proof-of-life is missed"
+                      : releaseMode === "NOW"
+                      ? "Immediately on save"
                       : releaseDate
                       ? `${new Date(`${releaseDate}T${releaseTime}:00+08:00`).toLocaleString("en-SG", { timeZone: "Asia/Singapore", dateStyle: "long", timeStyle: "short" })} SGT`
                       : "Date not set"}
@@ -792,6 +865,15 @@ export default function CreateMemoryModal({
             <button className="tb-btn tb-btn-primary" onClick={goNext}>
               Continue →
             </button>
+          ) : releaseMode === "NOW" ? (
+            <button
+              className="tb-btn"
+              onClick={() => { if (validateStep3()) setShowConfirm(true); }}
+              disabled={loading}
+              style={{ background: "#FAEEDA", border: "1px solid #EF9F27", color: "#854F0B" }}
+            >
+              {loading ? "Sending..." : "📜 Send this message now"}
+            </button>
           ) : (
             <button className="tb-btn tb-btn-gold" onClick={submit} disabled={loading}>
               {loading ? "Saving..." : "Save memory 💌"}
@@ -800,6 +882,82 @@ export default function CreateMemoryModal({
         </div>
 
       </div>
+
+      {/* ── Release Now confirmation dialog ── */}
+      {showConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(44,36,22,0.7)",
+            zIndex: 300,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+          }}
+        >
+          <div style={{
+            background: "var(--ivory)",
+            borderRadius: "var(--radius-xl)",
+            padding: "28px 24px",
+            maxWidth: 400,
+            width: "100%",
+            boxShadow: "var(--shadow-lift)",
+          }}>
+            <div style={{
+              width: 48, height: 48,
+              borderRadius: "50%",
+              background: "#FAEEDA",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 22, marginBottom: 16,
+            }}>
+              📜
+            </div>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 400, color: "var(--earth)", marginBottom: 8 }}>
+              Send this message now?
+            </div>
+            <div style={{ fontSize: 14, color: "var(--earth-muted)", lineHeight: 1.7, marginBottom: 20 }}>
+              This memory will be delivered immediately. Your receiver will get an email with a claim link right away.
+            </div>
+            <div style={{
+              background: "var(--cream)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-md)",
+              padding: "14px 16px",
+              marginBottom: 20,
+              fontSize: 13,
+              color: "var(--earth-mid)",
+              lineHeight: 1.8,
+            }}>
+              <div><strong>Memory:</strong> {collectionTitle}</div>
+              <div><strong>Recipient:</strong> {receivers.map((r) => r.name || "—").join(", ")}</div>
+              {receivers[0]?.email && <div><strong>Delivered to:</strong> {receivers[0].email}</div>}
+              <div style={{ marginTop: 8, fontSize: 12, color: "var(--earth-muted)" }}>
+                You can recall this within 24 hours if the receiver has not yet claimed it.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                className="tb-btn tb-btn-outline"
+                style={{ flex: 1 }}
+                onClick={() => setShowConfirm(false)}
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                className="tb-btn"
+                style={{ flex: 1, background: "#FAEEDA", border: "1px solid #EF9F27", color: "#854F0B" }}
+                onClick={submitNow}
+                disabled={loading}
+              >
+                {loading ? "Sending..." : "📜 Yes, deliver now"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
