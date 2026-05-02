@@ -202,9 +202,9 @@ export default function AdminHomePage() {
                 }}
               >
                 <div style={{
-                  fontFamily: "var(--font-display)",
-                  fontSize: 40,
-                  fontWeight: 300,
+                  fontFamily: "var(--font-body)",
+                  fontSize: 36,
+                  fontWeight: 700,
                   color: stat.color,
                   lineHeight: 1,
                 }}>
@@ -256,9 +256,9 @@ export default function AdminHomePage() {
                   }}
                 >
                   <div style={{
-                    fontFamily: "var(--font-display)",
-                    fontSize: 40,
-                    fontWeight: 300,
+                    fontFamily: "var(--font-body)",
+                    fontSize: 36,
+                    fontWeight: 700,
                     color: stat.color,
                     lineHeight: 1,
                   }}>

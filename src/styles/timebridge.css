@@ -347,9 +347,9 @@ p  { color: var(--text-body); line-height: 1.75; font-size: 16px; }
 .tb-stat-card:hover { box-shadow: var(--shadow-card); border-color: var(--gold-light); }
 
 .tb-stat-num {
-  font-family: var(--font-display);
-  font-size: 48px;
-  font-weight: 300;
+  font-family: var(--font-body);
+  font-size: 40px;
+  font-weight: 700;
   color: var(--gold);
   line-height: 1;
 }
