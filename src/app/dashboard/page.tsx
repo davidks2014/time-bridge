@@ -589,11 +589,11 @@ MY FINAL WORDS
             marginBottom: 28,
           }}>
             {[
-              { num: stats.totalMemories,   label: "Memories created" },
-              { num: stats.releasedMemories, label: "Released" },
-              { num: stats.totalReceivers,   label: "Recipients" },
+              { num: stats.totalMemories,    label: "Memories created", href: "/memory-sent" },
+              { num: stats.releasedMemories, label: "Released",         href: "/memory-sent?filter=released" },
+              { num: stats.totalReceivers,   label: "Recipients",       href: "/recipients" },
             ].map((s, i) => (
-              <div key={i} className="tb-stat-card">
+              <div key={i} className="tb-stat-card" style={{ cursor: "pointer" }} onClick={() => router.push(s.href)}>
                 <div className="tb-stat-num">{s.num}</div>
                 <div className="tb-stat-label">{s.label}</div>
               </div>
