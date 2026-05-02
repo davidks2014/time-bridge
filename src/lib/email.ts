@@ -19,10 +19,17 @@ import { Resend } from "resend";
 
 // ─── Resend client ────────────────────────────────────────────────────────────
 
+/**
+ * Returns a Resend client instance.
+ * Throws clearly if RESEND_API_KEY is missing or is the placeholder build key.
+ * This prevents accidental email sends in misconfigured environments.
+ */
 export function getResendClient(): Resend {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    throw new Error("RESEND_API_KEY is not set in environment variables.");
+  if (!apiKey || apiKey === "sk_placeholder_for_build") {
+    throw new Error(
+      "RESEND_API_KEY is not configured. Emails will not be sent."
+    );
   }
   return new Resend(apiKey);
 }
@@ -32,7 +39,7 @@ export function getResendClient(): Resend {
 // Set RESEND_FROM_EMAIL=noreply@yourdomain.com when domain is verified
 // Falls back to Resend sandbox address for development
 export const FROM_ADDRESS =
-  process.env.RESEND_FROM_EMAIL ?? "onboarding@resend.dev";
+  process.env.RESEND_FROM_EMAIL ?? "noreply@timebridge.sg";
 
 // ─── App base URL ─────────────────────────────────────────────────────────────
 

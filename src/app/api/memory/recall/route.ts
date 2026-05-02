@@ -23,6 +23,25 @@ import { authOptions } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Rate limiter for memory recall
+ * Max 10 recalls per user per hour to prevent email spam
+ */
+const recallAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function checkRecallRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const key = `recall:${userId}`;
+  const limit = recallAttempts.get(key);
+  if (!limit || limit.resetAt < now) {
+    recallAttempts.set(key, { count: 1, resetAt: now + 60 * 60 * 1000 });
+    return true;
+  }
+  if (limit.count >= 10) return false;
+  limit.count += 1;
+  return true;
+}
+
 export async function POST(req: Request) {
   try {
     // 1) Must be logged in
@@ -49,6 +68,13 @@ export async function POST(req: Request) {
 
     if (!user) {
       return Response.json({ error: "User not found." }, { status: 404 });
+    }
+
+    if (!checkRecallRateLimit(user.id)) {
+      return Response.json(
+        { error: "Too many recall attempts. Please try again later." },
+        { status: 429 }
+      );
     }
 
     // 3) Find the memory collection and verify ownership

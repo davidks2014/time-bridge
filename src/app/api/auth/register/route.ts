@@ -16,8 +16,41 @@ import bcrypt from "bcrypt";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Simple in-memory rate limiter
+ * Limits registration attempts to 5 per IP per hour
+ * Protects against bot account creation that could drain email quota
+ */
+const registrationAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function getRateLimitKey(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  const ip = forwarded ? forwarded.split(",")[0].trim() : "unknown";
+  return `register:${ip}`;
+}
+
+function checkRateLimit(key: string): boolean {
+  const now = Date.now();
+  const limit = registrationAttempts.get(key);
+  if (!limit || limit.resetAt < now) {
+    registrationAttempts.set(key, { count: 1, resetAt: now + 60 * 60 * 1000 });
+    return true;
+  }
+  if (limit.count >= 5) return false;
+  limit.count += 1;
+  return true;
+}
+
 export async function POST(req: Request) {
   try {
+    const rateLimitKey = getRateLimitKey(req);
+    if (!checkRateLimit(rateLimitKey)) {
+      return Response.json(
+        { error: "Too many registration attempts. Please try again later." },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
 
     // Read basic registration fields
