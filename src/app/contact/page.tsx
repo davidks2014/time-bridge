@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
 import PublicFooter from "@/components/PublicFooter";
 
-export const metadata: Metadata = {
-  title: "Contact — Time Bridge",
-  description: "Get in touch with the Time Bridge team. We respond within 3 business days.",
+export const metadata = {
+  title: "Contact Us",
+  description: "Get in touch with the Time Bridge team. We are here to help.",
 };
 
 export default function ContactPage() {

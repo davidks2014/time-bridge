@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
 import PublicFooter from "@/components/PublicFooter";
 
-export const metadata: Metadata = {
-  title: "Terms of Service — Time Bridge",
-  description: "Terms and conditions for using Time Bridge, Singapore's legacy message platform.",
+export const metadata = {
+  title: "Terms of Service",
+  description: "Time Bridge Terms of Service — the rules and guidelines for using our platform.",
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {

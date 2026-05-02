@@ -1,9 +1,8 @@
-import type { Metadata } from "next";
 import PublicFooter from "@/components/PublicFooter";
 
-export const metadata: Metadata = {
-  title: "Privacy Policy — Time Bridge",
-  description: "How Time Bridge collects, uses, and protects your personal data. PDPA compliant.",
+export const metadata = {
+  title: "Privacy Policy",
+  description: "Time Bridge Privacy Policy — how we collect, use, and protect your personal data in compliance with Singapore PDPA.",
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
