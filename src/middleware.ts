@@ -18,6 +18,20 @@ import type { NextRequest } from "next/server";
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Allow social media scrapers to access public pages without auth check
+  const userAgent = req.headers.get("user-agent") ?? "";
+  const isSocialBot =
+    userAgent.includes("facebookexternalhit") ||
+    userAgent.includes("Twitterbot") ||
+    userAgent.includes("LinkedInBot") ||
+    userAgent.includes("TelegramBot") ||
+    userAgent.includes("WhatsApp") ||
+    userAgent.includes("Slackbot");
+
+  if (isSocialBot) {
+    return NextResponse.next();
+  }
+
   // ── STEP 1: Public routes — no auth needed ───────────────────────────────
   const PUBLIC = [
     "/",
