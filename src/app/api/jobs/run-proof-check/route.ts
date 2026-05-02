@@ -233,3 +233,11 @@ export async function POST(req: Request) {
     return Response.json({ error: "Server error." }, { status: 500 });
   }
 }
+
+/**
+ * GET handler for Vercel Cron
+ * Vercel cron sends GET requests — this forwards to the POST logic
+ */
+export async function GET(req: Request) {
+  return POST(req);
+}
