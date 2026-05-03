@@ -36,7 +36,7 @@ export function getResendClient(): Resend {
 
 // ─── Sender address ───────────────────────────────────────────────────────────
 // FROM_ADDRESS — reads from environment variable in production
-// Set RESEND_FROM_EMAIL=noreply@yourdomain.com when domain is verified
+// Set RESEND_FROM_EMAIL=noreply@timebridge.sg when domain is verified
 // Falls back to Resend sandbox address for development
 export const FROM_ADDRESS =
   process.env.RESEND_FROM_EMAIL ?? "noreply@timebridge.sg";
@@ -192,7 +192,7 @@ export async function sendReceiverInviteEmail(
 
           <p style="color: #aaa; font-size: 12px; line-height: 1.7;">
             Time Bridge — Legacy message delivery service, Singapore.<br/>
-            If you have questions or concerns, contact us at support@yourdomain.com<br/>
+            If you have questions or concerns, contact us at support@timebridge.sg<br/>
             This is an automated message. Please do not reply directly to this email.
           </p>
 
@@ -295,7 +295,7 @@ export async function sendProofOfLifeReminderEmail(
 
           <p style="color: #aaa; font-size: 12px;">
             Time Bridge – Legacy message delivery service, Singapore.<br/>
-            If you have questions, contact us at support@yourdomain.com
+            If you have questions, contact us at support@timebridge.sg
           </p>
 
         </div>
@@ -345,7 +345,7 @@ export async function sendTrustedContactAlertEmail(
       : `This is an urgent message. ${senderName} has not responded to our reminders
          for an extended period. As their trusted contact, we are asking you to confirm
          whether they are still reachable. If they have passed away, please contact us
-         at support@yourdomain.com so we can proceed appropriately.
+         at support@timebridge.sg so we can proceed appropriately.
          If they are alive and well, please ask them to log in to Time Bridge immediately.`;
 
   try {
@@ -378,7 +378,7 @@ export async function sendTrustedContactAlertEmail(
 
           <p style="color: #aaa; font-size: 12px;">
             Time Bridge – Legacy message delivery service, Singapore.<br/>
-            Reply to this email or contact us at support@yourdomain.com
+            Reply to this email or contact us at support@timebridge.sg
           </p>
 
         </div>
@@ -525,7 +525,7 @@ export async function sendGuardianNotificationEmail(
 
           <p style="color: #888; font-size: 13px; line-height: 1.7;">
             This link will expire in 14 days. If you have any questions or
-            concerns, please contact us at support@yourdomain.com
+            concerns, please contact us at support@timebridge.sg
           </p>
 
           <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
@@ -698,7 +698,7 @@ export async function sendVerificationApprovedEmail(
 
           <p style="color: #aaa; font-size: 12px;">
             Time Bridge — Legacy message delivery service, Singapore.<br/>
-            If you have questions, contact us at support@yourdomain.com
+            If you have questions, contact us at support@timebridge.sg
           </p>
 
         </div>
@@ -802,7 +802,7 @@ export async function sendVerificationRejectedEmail(
 
           <p style="color: #aaa; font-size: 12px;">
             Time Bridge — Legacy message delivery service, Singapore.<br/>
-            If you have questions, contact us at support@yourdomain.com
+            If you have questions, contact us at support@timebridge.sg
           </p>
 
         </div>
