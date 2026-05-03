@@ -116,7 +116,7 @@ export default function CreateMemoryModal({
   );
 
   // Step 3 — Release
-  const [releaseMode, setReleaseMode] = useState<"PROOF" | "DATE" | "NOW">("PROOF");
+  const [releaseMode, setReleaseMode] = useState<"PROOF" | "DATE" | "NOW">(initialReleaseDate ? "DATE" : "PROOF");
   const [releaseDate, setReleaseDate] = useState(initialReleaseDate ?? "");
   const [releaseTime, setReleaseTime] = useState("08:00");
   const [showConfirm, setShowConfirm] = useState(false);
