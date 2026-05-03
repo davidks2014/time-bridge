@@ -401,6 +401,39 @@ export default function MemoryDetailsPage({ params }: { params: Promise<{ memory
         {/* Messages */}
         <div className="tb-section-label" style={{ marginBottom: 12 }}>Messages ({memory.items.length})</div>
 
+        {/* Release summary — always visible, even in edit mode */}
+        {memory.items.map((item) => {
+          const isReleased = item.status === "RELEASED";
+          return (
+            <div key={item.id} style={{
+              background: isReleased ? "var(--sage-pale)" : item.releaseDate ? "var(--gold-pale)" : "var(--parchment)",
+              border: `1px solid ${isReleased ? "var(--sage-light)" : item.releaseDate ? "var(--gold-light)" : "var(--border-dark)"}`,
+              borderRadius: "var(--radius-md)",
+              padding: "12px 16px",
+              marginBottom: 8,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}>
+              <div style={{
+                width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                background: isReleased ? "var(--sage)" : item.releaseDate ? "var(--gold)" : "var(--earth-muted)",
+              }} />
+              <div style={{ fontSize: 13, color: "var(--earth-mid)", lineHeight: 1.6 }}>
+                <strong style={{ fontFamily: "var(--font-display)", fontSize: 15 }}>{item.title}</strong>
+                <span style={{ margin: "0 8px", opacity: 0.4 }}>·</span>
+                {isReleased && item.releasedAt ? (
+                  <span>Released on <strong style={{ color: "var(--sage)" }}>{formatSingaporeDateTime(item.releasedAt)} SGT</strong></span>
+                ) : item.releaseDate ? (
+                  <span>Scheduled for <strong style={{ color: "var(--gold)" }}>{formatSingaporeDateTime(item.releaseDate)} SGT</strong></span>
+                ) : (
+                  <span>Releases when <strong style={{ color: "var(--earth-mid)" }}>proof-of-life is missed</strong> (6 consecutive missed check-ins)</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
         {attachmentError && <div className="tb-banner tb-banner-error" style={{ marginBottom: 16 }}><div className="tb-banner-dot tb-banner-dot-red" /><span>{attachmentError}</span></div>}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
