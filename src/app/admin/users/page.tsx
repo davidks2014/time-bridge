@@ -1,16 +1,5 @@
-/**
- * src/app/admin/users/page.tsx
- *
- * Purpose:
- * - Admin views all users
- * - Force approve/reject verification
- * - Reset proof-of-life stage
- * - See memory counts and proof-of-life status
- */
-
 "use client";
-
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import TimeBridgeLoading from "@/components/TimeBridgeLoading";
@@ -30,288 +19,185 @@ type User = {
   _count: { collections: number };
 };
 
-const verificationColor = (status: string) => {
-  if (status === "APPROVED") return { bg: "#f0fdf8", text: "#065f46", border: "#6ee7b7" };
-  if (status === "PENDING") return { bg: "#fffbeb", text: "#92400e", border: "#fde68a" };
-  if (status === "REJECTED") return { bg: "#fef2f2", text: "#991b1b", border: "#fecaca" };
-  return { bg: "#f9fafb", text: "#6b7280", border: "#e5e7eb" };
+type Pagination = {
+  page: number; limit: number; total: number;
+  totalPages: number; hasNext: boolean; hasPrev: boolean;
 };
 
-const proofColor = (stage: string) => {
-  if (stage === "NORMAL") return "#065f46";
-  if (stage === "WARNING") return "#92400e";
-  if (stage === "CRITICAL") return "#991b1b";
-  return "#6b7280";
+const s = {
+  page: "#1C1814", card: "#2C2416", border: "#3D3020",
+  text: "#F0E8D8", muted: "#9B8060", dim: "#6B5840", gold: "#B8965A",
 };
+
+function statusStyle(v: string) {
+  if (v === "APPROVED") return { bg: "rgba(29,158,117,0.15)", text: "#5DCAA5", border: "rgba(29,158,117,0.3)" };
+  if (v === "REJECTED") return { bg: "rgba(226,75,74,0.15)", text: "#F09595", border: "rgba(226,75,74,0.3)" };
+  return { bg: "rgba(250,199,117,0.15)", text: "#FAC775", border: "rgba(250,199,117,0.3)" };
+}
+
+function proofStyle(p: string) {
+  if (p === "CRITICAL") return "#F09595";
+  if (p === "WARNING") return "#FAC775";
+  return "#5DCAA5";
+}
 
 export default function AdminUsersPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-
   const [users, setUsers] = useState<User[]>([]);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [actionMsg, setActionMsg] = useState("");
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [filter, setFilter] = useState<"ALL" | "PENDING" | "APPROVED" | "REJECTED">("ALL");
+  const [page, setPage] = useState(1);
   const [acting, setActing] = useState<Record<string, boolean>>({});
-  const [actionMessage, setActionMessage] = useState("");
 
   const role = (session?.user as any)?.role;
 
+  useEffect(() => { if (status === "unauthenticated") router.push("/login"); }, [status, router]);
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/login");
-  }, [status, router]);
+    if (status === "authenticated" && role && role !== "ADMIN") router.replace("/dashboard");
+  }, [status, role, router]);
 
-  useEffect(() => {
-    if (status === "authenticated") {
-      if (role && role !== "ADMIN") router.replace("/dashboard");
-      else loadUsers();
-    }
-  }, [status, role]);
-
-  async function loadUsers() {
-    setLoading(true);
-    setError("");
+  const loadUsers = useCallback(async () => {
+    setLoading(true); setError("");
     try {
-      const res = await fetch("/api/admin/users");
+      const params = new URLSearchParams({ page: String(page), limit: "20", status: filter });
+      if (search) params.set("search", search);
+      const res = await fetch(`/api/admin/users?${params}`);
       const json = await res.json();
-      if (!res.ok) {
-        setError(json?.error ?? "Failed to load users.");
-        return;
-      }
+      if (!res.ok) { setError(json?.error ?? "Failed."); return; }
       setUsers(json.users ?? []);
-    } catch {
-      setError("Network error.");
-    } finally {
-      setLoading(false);
-    }
-  }
+      setPagination(json.pagination ?? null);
+    } catch { setError("Network error."); } finally { setLoading(false); }
+  }, [page, filter, search]);
+
+  useEffect(() => { if (status === "authenticated" && role === "ADMIN") loadUsers(); }, [status, role, loadUsers]);
 
   async function performAction(userId: string, action: string) {
-    setActing((prev) => ({ ...prev, [userId]: true }));
-    setActionMessage("");
+    setActing((p) => ({ ...p, [userId]: true })); setActionMsg(""); setError("");
     try {
       const res = await fetch("/api/admin/users", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, action }),
       });
       const json = await res.json();
-      if (!res.ok) {
-        setError(json?.error ?? "Action failed.");
-        return;
-      }
-      setActionMessage(json.message);
+      if (!res.ok) { setError(json?.error ?? "Failed."); return; }
+      setActionMsg(json.message);
       await loadUsers();
-    } catch {
-      setError("Network error.");
-    } finally {
-      setActing((prev) => ({ ...prev, [userId]: false }));
-    }
+    } catch { setError("Network error."); } finally { setActing((p) => ({ ...p, [userId]: false })); }
   }
 
-  const filtered = users.filter((u) => {
-    if (filter === "ALL") return u.role !== "ADMIN";
-    return u.verificationStatus === filter && u.role !== "ADMIN";
-  });
+  function handleSearch() { setSearch(searchInput); setPage(1); }
 
-  if (status === "loading" || loading) return <TimeBridgeLoading message="Loading users..." />;
+  if (status === "loading") return <TimeBridgeLoading message="Loading users..." />;
 
   return (
-    <div style={{ padding: 20, maxWidth: 1000, margin: "0 auto" }}>
+    <div style={{ minHeight: "100vh", background: s.page, padding: "24px 20px 48px", fontFamily: "var(--font-body)" }}>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
 
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 20,
-      }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 900, margin: 0 }}>User Management</h1>
-          <div style={{ color: "#6b7280", fontSize: 13, marginTop: 4 }}>
-            {filtered.length} users shown
+        {/* Nav */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${s.border}` }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.16em", color: s.gold, marginBottom: 4 }}>USER MANAGEMENT</div>
+            <div style={{ fontSize: 13, color: s.muted }}>{pagination?.total ?? 0} users total</div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => router.push("/admin")} style={{ background: "transparent", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontFamily: "var(--font-body)", fontWeight: 700 }}>← Admin home</button>
+            <button onClick={loadUsers} style={{ background: "transparent", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontFamily: "var(--font-body)", fontWeight: 700 }}>↻ Refresh</button>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => router.push("/admin")}>Back to admin</button>
-          <button onClick={loadUsers}>Refresh</button>
+
+        {/* Search */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            placeholder="Search by name, email or NRIC..."
+            style={{ flex: 1, background: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "10px 14px", color: s.text, fontSize: 13, fontFamily: "var(--font-body)", outline: "none" }}
+          />
+          <button onClick={handleSearch} style={{ background: "rgba(184,150,90,0.15)", border: `1px solid ${s.gold}`, color: s.gold, borderRadius: 8, padding: "10px 18px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "var(--font-body)" }}>Search</button>
         </div>
-      </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        {(["ALL", "PENDING", "APPROVED", "REJECTED"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              background: filter === f ? "#1D9E75" : "white",
-              color: filter === f ? "white" : "#374151",
-              border: `1px solid ${filter === f ? "#1D9E75" : "#e5e7eb"}`,
-              borderRadius: 8,
-              padding: "6px 14px",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
-            {f === "ALL"
-              ? `All Users (${users.filter((u) => u.role !== "ADMIN").length})`
-              : `${f} (${users.filter((u) => u.verificationStatus === f && u.role !== "ADMIN").length})`}
-          </button>
-        ))}
-      </div>
-
-      {error && (
-        <div style={{
-          padding: "10px 14px",
-          background: "#fef2f2",
-          border: "1px solid #fecaca",
-          borderRadius: 8,
-          color: "#991b1b",
-          fontSize: 13,
-          marginBottom: 16,
-        }}>
-          {error}
+        {/* Filters */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+          {(["ALL", "PENDING", "APPROVED", "REJECTED"] as const).map((f) => (
+            <button key={f} onClick={() => { setFilter(f); setPage(1); }} style={{
+              fontSize: 11, fontWeight: 700, padding: "5px 14px", borderRadius: 20, cursor: "pointer",
+              background: filter === f ? "rgba(184,150,90,0.15)" : "transparent",
+              border: `1px solid ${filter === f ? s.gold : s.border}`,
+              color: filter === f ? s.gold : s.muted, fontFamily: "var(--font-body)",
+            }}>{f}</button>
+          ))}
         </div>
-      )}
 
-      {actionMessage && (
-        <div style={{
-          padding: "10px 14px",
-          background: "#f0fdf4",
-          border: "1px solid #bbf7d0",
-          borderRadius: 8,
-          color: "#166534",
-          fontSize: 13,
-          marginBottom: 16,
-        }}>
-          {actionMessage}
-        </div>
-      )}
+        {error && <div style={{ background: "rgba(226,75,74,0.1)", border: "1px solid rgba(226,75,74,0.3)", borderRadius: 8, padding: "10px 14px", color: "#F09595", fontSize: 13, marginBottom: 16 }}>{error}</div>}
+        {actionMsg && <div style={{ background: "rgba(29,158,117,0.1)", border: "1px solid rgba(29,158,117,0.3)", borderRadius: 8, padding: "10px 14px", color: "#5DCAA5", fontSize: 13, marginBottom: 16 }}>{actionMsg}</div>}
 
-      {filtered.length === 0 && (
-        <div style={{ color: "#6b7280", padding: 20, textAlign: "center" }}>
-          No users found.
-        </div>
-      )}
-
-      <div style={{ display: "grid", gap: 12 }}>
-        {filtered.map((user) => {
-          const vColors = verificationColor(user.verificationStatus);
-          const busy = !!acting[user.id];
-
-          return (
-            <div key={user.id} style={{
-              border: `1px solid ${vColors.border}`,
-              borderRadius: 14,
-              padding: 16,
-              background: vColors.bg,
-            }}>
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                flexWrap: "wrap",
-                gap: 8,
-              }}>
-                <div>
-                  <div style={{ fontWeight: 900, fontSize: 15 }}>
-                    {user.name}
-                    <span style={{
-                      marginLeft: 8,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      padding: "2px 8px",
-                      borderRadius: 999,
-                      background: vColors.bg,
-                      color: vColors.text,
-                      border: `1px solid ${vColors.border}`,
-                    }}>
-                      {user.verificationStatus}
-                    </span>
-                  </div>
-                  <div style={{ color: "#6b7280", fontSize: 13, marginTop: 4 }}>
-                    {user.email}
-                  </div>
-                  <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 2 }}>
-                    NRIC: {user.identificationNo ?? "Not set"} ·
-                    Phone: {user.phoneNumber ?? "Not set"} ·
-                    Memories: {user._count.collections}
-                  </div>
-                  <div style={{
-                    marginTop: 6,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: proofColor(user.proofOfLifeStage),
-                  }}>
-                    Proof-of-life: {user.proofOfLifeStage} ·
-                    Missed: {user.missedConfirmations} ·
-                    Last confirmed: {user.lastConfirmedAt
-                      ? new Date(user.lastConfirmedAt).toLocaleDateString("en-SG")
-                      : "Never"}
+        {loading ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {[0,1,2].map((i) => <div key={i} style={{ height: 80, borderRadius: 12, background: s.card, opacity: 0.5 }} />)}
+          </div>
+        ) : users.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "48px 0", color: s.muted }}>
+            <div style={{ fontSize: 15, fontFamily: "var(--font-display)", color: s.text }}>No users found</div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {users.map((user) => {
+              const vs = statusStyle(user.verificationStatus);
+              const busy = !!acting[user.id];
+              return (
+                <div key={user.id} style={{ background: s.card, border: `1px solid ${s.border}`, borderRadius: 14, padding: 16 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 4 }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: s.text }}>{user.name}</span>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: vs.bg, color: vs.text, border: `1px solid ${vs.border}` }}>{user.verificationStatus}</span>
+                        {user.proofOfLifeStage !== "NORMAL" && (
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "rgba(226,75,74,0.1)", color: "#F09595", border: "1px solid rgba(226,75,74,0.2)" }}>{user.proofOfLifeStage}</span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: s.muted }}>{user.email}</div>
+                      <div style={{ fontSize: 11, color: s.dim, marginTop: 6, lineHeight: 1.7 }}>
+                        NRIC: {user.identificationNo ?? "Not set"} · Phone: {user.phoneNumber ?? "Not set"} · Memories: {user._count.collections}<br/>
+                        Proof-of-life: <span style={{ color: proofStyle(user.proofOfLifeStage), fontWeight: 700 }}>{user.proofOfLifeStage}</span> · Missed: {user.missedConfirmations} · Last confirmed: {user.lastConfirmedAt ? new Date(user.lastConfirmedAt).toLocaleDateString("en-SG") : "Never"}<br/>
+                        Joined: {new Date(user.createdAt).toLocaleDateString("en-SG")}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
+                      {user.verificationStatus === "PENDING" && (
+                        <>
+                          <button onClick={() => performAction(user.id, "FORCE_APPROVE")} disabled={busy} style={{ background: "rgba(29,158,117,0.2)", border: "1px solid rgba(29,158,117,0.4)", color: "#5DCAA5", borderRadius: 6, padding: "6px 12px", cursor: busy ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 700, fontFamily: "var(--font-body)" }}>Force approve</button>
+                          <button onClick={() => performAction(user.id, "FORCE_REJECT")} disabled={busy} style={{ background: "rgba(226,75,74,0.15)", border: "1px solid rgba(226,75,74,0.3)", color: "#F09595", borderRadius: 6, padding: "6px 12px", cursor: busy ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 700, fontFamily: "var(--font-body)" }}>Force reject</button>
+                        </>
+                      )}
+                      {user.proofOfLifeStage !== "NORMAL" && (
+                        <button onClick={() => performAction(user.id, "RESET_PROOF")} disabled={busy} style={{ background: "rgba(184,150,90,0.15)", border: `1px solid ${s.gold}`, color: s.gold, borderRadius: 6, padding: "6px 12px", cursor: busy ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 700, fontFamily: "var(--font-body)" }}>Reset proof</button>
+                      )}
+                    </div>
                   </div>
                 </div>
+              );
+            })}
+          </div>
+        )}
 
-                {/* Actions */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {user.verificationStatus === "PENDING" && (
-                    <>
-                      <button
-                        onClick={() => performAction(user.id, "FORCE_APPROVE")}
-                        disabled={busy}
-                        style={{
-                          background: "#1D9E75",
-                          color: "white",
-                          border: "none",
-                          borderRadius: 6,
-                          padding: "6px 12px",
-                          cursor: "pointer",
-                          fontSize: 12,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Force Approve
-                      </button>
-                      <button
-                        onClick={() => performAction(user.id, "FORCE_REJECT")}
-                        disabled={busy}
-                        style={{
-                          background: "#dc2626",
-                          color: "white",
-                          border: "none",
-                          borderRadius: 6,
-                          padding: "6px 12px",
-                          cursor: "pointer",
-                          fontSize: 12,
-                          fontWeight: 600,
-                        }}
-                      >
-                        Force Reject
-                      </button>
-                    </>
-                  )}
-                  {user.proofOfLifeStage !== "NORMAL" && (
-                    <button
-                      onClick={() => performAction(user.id, "RESET_PROOF")}
-                      disabled={busy}
-                      style={{
-                        background: "#f59e0b",
-                        color: "white",
-                        border: "none",
-                        borderRadius: 6,
-                        padding: "6px 12px",
-                        cursor: "pointer",
-                        fontSize: 12,
-                        fontWeight: 600,
-                      }}
-                    >
-                      Reset Proof-of-life
-                    </button>
-                  )}
-                </div>
-              </div>
+        {/* Pagination */}
+        {pagination && pagination.totalPages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 24, paddingTop: 16, borderTop: `1px solid ${s.border}`, flexWrap: "wrap", gap: 12 }}>
+            <span style={{ fontSize: 12, color: s.dim }}>Page {pagination.page} of {pagination.totalPages} · {pagination.total} users</span>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setPage((p) => p - 1)} disabled={!pagination.hasPrev} style={{ background: "transparent", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "6px 14px", cursor: pagination.hasPrev ? "pointer" : "not-allowed", fontSize: 11, fontFamily: "var(--font-body)", opacity: pagination.hasPrev ? 1 : 0.4 }}>← Prev</button>
+              <button onClick={() => setPage((p) => p + 1)} disabled={!pagination.hasNext} style={{ background: "transparent", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "6px 14px", cursor: pagination.hasNext ? "pointer" : "not-allowed", fontSize: 11, fontFamily: "var(--font-body)", opacity: pagination.hasNext ? 1 : 0.4 }}>Next →</button>
             </div>
-          );
-        })}
+          </div>
+        )}
+
       </div>
     </div>
   );

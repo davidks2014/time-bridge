@@ -1,24 +1,7 @@
-// src/app/admin/verification/page.tsx
 "use client";
-
-/**
- * Admin Verification Dashboard
- *
- * Page: /admin/verification
- *
- * Features:
- * - List PENDING users (GET /api/admin/verification/pending)
- * - Show verification document images
- * - Approve / Reject (POST /api/admin/verification/decision)
- *
- * Security:
- * - If not logged in -> /login
- * - If not ADMIN -> redirect to /dashboard (server also enforces)
- */
-
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
 type PendingUser = {
@@ -34,397 +17,225 @@ type PendingUser = {
   createdAt: string;
 };
 
+const ADMIN_DARK = {
+  page: "#1C1814",
+  card: "#2C2416",
+  border: "#3D3020",
+  text: "#F0E8D8",
+  muted: "#9B8060",
+  dim: "#6B5840",
+  gold: "#B8965A",
+};
+
 export default function AdminVerificationPage() {
   const router = useRouter();
   const { status, data: session } = useSession();
-
   const [users, setUsers] = useState<PendingUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  // Per-user reject reason input
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"PENDING" | "APPROVED" | "REJECTED" | "ALL">("PENDING");
   const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
-  // Per-user action loading
   const [acting, setActing] = useState<Record<string, boolean>>({});
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const pendingCount = useMemo(() => users.length, [users]);
+  const role = (session?.user as any)?.role;
 
-  const role = (session?.user as any)?.role as "USER" | "ADMIN" | undefined;
-
-  /**
-   * Auth:
-   * - If not logged in -> /login
-   * - If logged in but not admin -> /dashboard
-   */
-  useEffect(() => {
-    if (status === "unauthenticated") router.push("/login");
-  }, [status, router]);
-
+  useEffect(() => { if (status === "unauthenticated") router.push("/login"); }, [status, router]);
   useEffect(() => {
     if (status !== "authenticated") return;
     if (role && role !== "ADMIN") router.replace("/dashboard");
   }, [status, role, router]);
+  useEffect(() => { if (status === "authenticated" && role === "ADMIN") loadPending(); }, [status, role]);
 
-  /**
-   * Load pending list
-   */
   async function loadPending() {
-    setError("");
-    setLoading(true);
+    setError(""); setLoading(true);
     try {
-      const res = await fetch("/api/admin/verification/pending", {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      });
-
+      const res = await fetch("/api/admin/verification/pending");
       const json = await res.json();
-
-      if (!res.ok) {
-        setError(json?.error ?? "Failed to load pending verifications.");
-        setUsers([]);
-        return;
-      }
-
+      if (!res.ok) { setError(json?.error ?? "Failed to load."); return; }
       setUsers(json.users ?? []);
-    } catch {
-      setError("Network error.");
-      setUsers([]);
-    } finally {
-      setLoading(false);
-    }
+    } catch { setError("Network error."); } finally { setLoading(false); }
   }
 
-  /**
-   * After login, load pending.
-   */
-  useEffect(() => {
-    if (status === "authenticated" && role === "ADMIN") loadPending();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, role]);
-
-  /**
-   * Approve user
-   */
   async function approveUser(userId: string) {
-    setError("");
-    setActing((prev) => ({ ...prev, [userId]: true }));
-
+    setActing((p) => ({ ...p, [userId]: true }));
     try {
       const res = await fetch("/api/admin/verification/decision", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, decision: "APPROVE" }),
       });
-
-      const json = await res.json();
-
-      if (!res.ok) {
-        setError(json?.error ?? "Approve failed.");
-        return;
-      }
-
-      setUsers((prev) => prev.filter((u) => u.id !== userId));
-    } catch {
-      setError("Network error.");
-    } finally {
-      setActing((prev) => ({ ...prev, [userId]: false }));
-    }
+      if (res.ok) setUsers((p) => p.filter((u) => u.id !== userId));
+      else setError((await res.json())?.error ?? "Failed.");
+    } catch { setError("Network error."); } finally { setActing((p) => ({ ...p, [userId]: false })); }
   }
 
-  /**
-   * Reject user
-   */
   async function rejectUser(userId: string) {
-    setError("");
     const reason = (rejectReasons[userId] ?? "").trim();
-    if (!reason) {
-      setError("Reject reason is required.");
-      return;
-    }
-
-    setActing((prev) => ({ ...prev, [userId]: true }));
-
+    if (!reason) { setError("Reject reason is required."); return; }
+    setActing((p) => ({ ...p, [userId]: true }));
     try {
       const res = await fetch("/api/admin/verification/decision", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId, decision: "REJECT", rejectReason: reason }),
       });
-
-      const json = await res.json();
-
-      if (!res.ok) {
-        setError(json?.error ?? "Reject failed.");
-        return;
-      }
-
-      setUsers((prev) => prev.filter((u) => u.id !== userId));
-    } catch {
-      setError("Network error.");
-    } finally {
-      setActing((prev) => ({ ...prev, [userId]: false }));
-    }
+      if (res.ok) setUsers((p) => p.filter((u) => u.id !== userId));
+      else setError((await res.json())?.error ?? "Failed.");
+    } catch { setError("Network error."); } finally { setActing((p) => ({ ...p, [userId]: false })); }
   }
 
-  function Pill({ text }: { text: string }) {
-    return (
-      <span
-        style={{
-          display: "inline-flex",
-          padding: "4px 10px",
-          borderRadius: 999,
-          border: "1px solid #e5e7eb",
-          background: "#f9fafb",
-          fontSize: 12,
-          fontWeight: 800,
-          color: "#111827",
-        }}
-      >
-        {text}
-      </span>
-    );
-  }
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return users.filter((u) => {
+      const matchFilter = filter === "ALL" ? true : u.verificationStatus === filter;
+      const matchSearch = !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.identificationNo.toLowerCase().includes(q);
+      return matchFilter && matchSearch;
+    });
+  }, [users, filter, search]);
+
+  const counts = useMemo(() => ({
+    PENDING: users.filter((u) => u.verificationStatus === "PENDING").length,
+    APPROVED: users.filter((u) => u.verificationStatus === "APPROVED").length,
+    REJECTED: users.filter((u) => u.verificationStatus === "REJECTED").length,
+  }), [users]);
 
   if (status === "loading" || loading) return <TimeBridgeLoading message="Loading verification queue..." />;
 
+  const c = ADMIN_DARK;
+
   return (
-    <div style={{ padding: 20, maxWidth: 1100, margin: "0 auto" }}>
-      {/* Header / Summary Bar */}
-      <div
-        style={{
-          border: "1px solid #e5e7eb",
-          borderRadius: 16,
-          padding: 16,
-          background: "white",
-          boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-        }}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+    <div style={{ minHeight: "100vh", background: c.page, padding: "24px 20px 48px", fontFamily: "var(--font-body)" }}>
+      <div style={{ maxWidth: 800, margin: "0 auto" }}>
+
+        {/* Nav */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${c.border}` }}>
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0 }}>Admin Verification</h1>
-              <Pill text={`Pending: ${loading ? "..." : pendingCount}`} />
-            </div>
-
-            <div style={{ color: "#6b7280", marginTop: 6 }}>
-              Review identity documents submitted during registration.
-            </div>
-
-            <div style={{ color: "#9ca3af", marginTop: 6, fontSize: 12 }}>
-              Logged in as: {session?.user?.email ?? "-"} {role ? `(${role})` : ""}
-            </div>
+            <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.16em", color: c.gold, marginBottom: 4 }}>VERIFICATION QUEUE</div>
+            <div style={{ fontSize: 13, color: c.muted }}>{counts.PENDING} pending · {counts.APPROVED} approved · {counts.REJECTED} rejected</div>
           </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => router.push("/admin")} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontFamily: "var(--font-body)", fontWeight: 700 }}>← Admin home</button>
+            <button onClick={loadPending} style={{ background: "transparent", border: `1px solid ${c.border}`, color: c.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontFamily: "var(--font-body)", fontWeight: 700 }}>↻ Refresh</button>
+          </div>
+        </div>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button onClick={() => loadPending()} disabled={loading}>
-              {loading ? "Refreshing..." : "Refresh"}
+        {/* Search */}
+        <input
+          value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by name, email or NRIC..."
+          style={{ width: "100%", background: c.card, border: `1px solid ${c.border}`, borderRadius: 8, padding: "10px 14px", color: c.text, fontSize: 13, fontFamily: "var(--font-body)", marginBottom: 12, outline: "none", boxSizing: "border-box" }}
+        />
+
+        {/* Filters */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+          {(["PENDING", "APPROVED", "REJECTED", "ALL"] as const).map((f) => (
+            <button key={f} onClick={() => setFilter(f)} style={{
+              fontSize: 11, fontWeight: 700, padding: "5px 14px", borderRadius: 20, cursor: "pointer",
+              background: filter === f ? "rgba(184,150,90,0.15)" : "transparent",
+              border: `1px solid ${filter === f ? c.gold : c.border}`,
+              color: filter === f ? c.gold : c.muted,
+              fontFamily: "var(--font-body)",
+            }}>
+              {f === "ALL" ? `All (${users.length})` : `${f} (${counts[f]})`}
             </button>
-
-            <button onClick={() => router.push("/dashboard")}>User Dashboard</button>
-
-            <button onClick={() => signOut({ callbackUrl: "/login" })}>Logout</button>
-          </div>
+          ))}
         </div>
-      </div>
 
-      {/* Error */}
-      {error && (
-        <div
-          style={{
-            marginTop: 14,
-            padding: 12,
-            border: "1px solid #fecaca",
-            borderRadius: 12,
-            background: "#fff1f2",
-            color: "#991b1b",
-            fontWeight: 700,
-          }}
-        >
-          {error}
-          <div style={{ marginTop: 6, color: "#7f1d1d", fontSize: 12, fontWeight: 600 }}>
-            If you see “Forbidden. Admin only.” you are not logged in as an ADMIN user.
+        {/* Error */}
+        {error && <div style={{ background: "rgba(226,75,74,0.1)", border: "1px solid rgba(226,75,74,0.3)", borderRadius: 8, padding: "10px 14px", color: "#F09595", fontSize: 13, marginBottom: 16 }}>{error}</div>}
+
+        {/* Empty state */}
+        {filtered.length === 0 && (
+          <div style={{ textAlign: "center", padding: "48px 0", color: c.muted }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>✓</div>
+            <div style={{ fontSize: 15, fontFamily: "var(--font-display)", color: c.text }}>Queue is clear</div>
+            <div style={{ fontSize: 13, marginTop: 6 }}>No {filter === "ALL" ? "" : filter.toLowerCase()} verifications found</div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Content */}
-      <div style={{ marginTop: 16 }}>
-        {loading ? (
-          <div style={{ color: "#6b7280" }}>Loading pending users...</div>
-        ) : users.length === 0 ? (
-          <div style={{ color: "#6b7280" }}>No pending verifications.</div>
-        ) : (
-          <div style={{ display: "grid", gap: 14 }}>
-            {users.map((u) => {
-              const busy = !!acting[u.id];
+        {/* User cards */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {filtered.map((u) => {
+            const busy = !!acting[u.id];
+            const isExpanded = expandedId === u.id;
+            const statusColor = u.verificationStatus === "APPROVED" ? { bg: "rgba(29,158,117,0.15)", text: "#5DCAA5", border: "rgba(29,158,117,0.3)" }
+              : u.verificationStatus === "REJECTED" ? { bg: "rgba(226,75,74,0.15)", text: "#F09595", border: "rgba(226,75,74,0.3)" }
+              : { bg: "rgba(250,199,117,0.15)", text: "#FAC775", border: "rgba(250,199,117,0.3)" };
 
-              return (
-                <div
-                  key={u.id}
-                  style={{
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 16,
-                    padding: 16,
-                    background: "white",
-                    boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-                  }}
-                >
-                  {/* Top Row */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 14 }}>
-                    {/* User summary */}
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                        <div style={{ fontWeight: 900, fontSize: 16 }}>
-                          {u.name}{" "}
-                          <span style={{ color: "#6b7280", fontWeight: 700 }}>
-                            ({u.email})
-                          </span>
-                        </div>
-                        <Pill text={u.verificationStatus} />
-                      </div>
+            return (
+              <div key={u.id} style={{ background: c.card, border: `1px solid ${c.border}`, borderRadius: 14, overflow: "hidden" }}>
+                {/* Card header — clickable to expand */}
+                <div onClick={() => setExpandedId(isExpanded ? null : u.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: 16, cursor: "pointer" }}>
+                  <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(184,150,90,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: c.gold, flexShrink: 0 }}>
+                    {u.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: c.text }}>{u.name}</div>
+                    <div style={{ fontSize: 12, color: c.muted, marginTop: 2 }}>{u.email} · {u.identificationNo}</div>
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 20, background: statusColor.bg, color: statusColor.text, border: `1px solid ${statusColor.border}`, flexShrink: 0 }}>
+                    {u.verificationStatus}
+                  </span>
+                  <svg style={{ transition: "transform 0.3s ease", transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)", flexShrink: 0 }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={c.gold} strokeWidth="2" strokeLinecap="round"><polyline points="9,18 15,12 9,6"/></svg>
+                </div>
 
-                      <div style={{ marginTop: 10, display: "grid", gap: 6, color: "#374151" }}>
-                        <div>
-                          Phone: <b>{u.phoneNumber}</b>
+                {/* Expandable detail */}
+                {isExpanded && (
+                  <div style={{ borderTop: `1px solid ${c.border}`, padding: 16 }}>
+                    {/* Fields */}
+                    <div style={{ background: "#1C1814", borderRadius: 10, padding: "4px 12px", marginBottom: 14 }}>
+                      {[
+                        { label: "Phone", value: u.phoneNumber },
+                        { label: "Address", value: u.address },
+                        { label: "Submitted", value: new Date(u.createdAt).toLocaleString("en-SG") },
+                      ].map((row) => (
+                        <div key={row.label} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${c.border}`, fontSize: 12 }}>
+                          <span style={{ color: c.muted }}>{row.label}</span>
+                          <span style={{ color: c.text, fontWeight: 700, textAlign: "right", marginLeft: 12 }}>{row.value}</span>
                         </div>
-                        <div>
-                          ID No: <b>{u.identificationNo}</b>
-                        </div>
-                        <div>
-                          Address: <b>{u.address}</b>
-                        </div>
-                      </div>
+                      ))}
+                    </div>
 
-                      <div style={{ marginTop: 10, fontSize: 12, color: "#9ca3af" }}>
-                        Submitted: {new Date(u.createdAt).toLocaleString()}
-                      </div>
+                    {/* Documents */}
+                    <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.14em", color: c.gold, marginBottom: 10 }}>VERIFICATION DOCUMENTS</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                      {[
+                        { label: "FRONT", url: u.verificationDocFrontUrl },
+                        { label: "BACK (OPTIONAL)", url: u.verificationDocBackUrl },
+                      ].map((doc) => (
+                        <div key={doc.label} style={{ background: "#1C1814", border: `1px solid ${c.border}`, borderRadius: 10, padding: 10 }}>
+                          <div style={{ fontSize: 10, color: c.muted, letterSpacing: "0.06em", marginBottom: 8, fontWeight: 700 }}>{doc.label}</div>
+                          {doc.url ? (
+                            <img src={doc.url} alt={doc.label} style={{ width: "100%", borderRadius: 8, border: `1px solid ${c.border}`, display: "block" }} />
+                          ) : (
+                            <div style={{ height: 60, display: "flex", alignItems: "center", justifyContent: "center", color: c.dim, fontSize: 12 }}>No image</div>
+                          )}
+                        </div>
+                      ))}
                     </div>
 
                     {/* Actions */}
-                    <div
-                      style={{
-                        border: "1px solid #f3f4f6",
-                        borderRadius: 14,
-                        padding: 12,
-                        background: "#fafafa",
-                      }}
-                    >
-                      <div style={{ fontWeight: 900 }}>Decision</div>
-
-                      <div style={{ marginTop: 10, display: "flex", gap: 10 }}>
-                        <button onClick={() => approveUser(u.id)} disabled={busy}>
-                          {busy ? "Working..." : "Approve"}
-                        </button>
-
-                        <button onClick={() => rejectUser(u.id)} disabled={busy}>
-                          {busy ? "Working..." : "Reject"}
-                        </button>
-                      </div>
-
-                      <div style={{ marginTop: 10 }}>
-                        <div style={{ fontSize: 12, fontWeight: 800, color: "#6b7280", marginBottom: 6 }}>
-                          Reject reason (required if rejecting)
-                        </div>
-                        <textarea
-                          rows={2}
-                          placeholder="Example: Photo unclear / ID mismatch"
-                          value={rejectReasons[u.id] ?? ""}
-                          onChange={(e) =>
-                            setRejectReasons((prev) => ({ ...prev, [u.id]: e.target.value }))
-                          }
-                          style={{ width: "100%", borderRadius: 10, padding: 10 }}
-                          disabled={busy}
-                        />
-                      </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <button onClick={() => approveUser(u.id)} disabled={busy} style={{ background: "rgba(29,158,117,0.2)", border: "1px solid rgba(29,158,117,0.4)", color: "#5DCAA5", borderRadius: 8, padding: "8px 18px", fontSize: 12, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-body)" }}>
+                        {busy ? "Working..." : "✓ Approve"}
+                      </button>
+                      <input
+                        value={rejectReasons[u.id] ?? ""}
+                        onChange={(e) => setRejectReasons((p) => ({ ...p, [u.id]: e.target.value }))}
+                        placeholder="Reject reason (required)..."
+                        style={{ flex: 1, minWidth: 160, background: "#1C1814", border: `1px solid ${c.border}`, borderRadius: 8, padding: "8px 12px", color: c.text, fontSize: 12, fontFamily: "var(--font-body)", outline: "none" }}
+                      />
+                      <button onClick={() => rejectUser(u.id)} disabled={busy} style={{ background: "rgba(226,75,74,0.15)", border: "1px solid rgba(226,75,74,0.3)", color: "#F09595", borderRadius: 8, padding: "8px 18px", fontSize: 12, fontWeight: 700, cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-body)" }}>
+                        {busy ? "Working..." : "✕ Reject"}
+                      </button>
                     </div>
                   </div>
-
-                  {/* Documents */}
-                  <div style={{ marginTop: 14 }}>
-                    <div style={{ fontWeight: 900, marginBottom: 10 }}>Verification Documents</div>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 12,
-                      }}
-                    >
-                      {/* Front */}
-                      <div style={{ border: "1px solid #f3f4f6", borderRadius: 14, padding: 12 }}>
-                        <div style={{ fontWeight: 900, marginBottom: 8 }}>Front</div>
-                        {u.verificationDocFrontUrl ? (
-                          <>
-                            <img
-                              src={u.verificationDocFrontUrl}
-                              alt="Verification document front"
-                              style={{
-                                width: "100%",
-                                borderRadius: 12,
-                                border: "1px solid #e5e7eb",
-                              }}
-                            />
-                            <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
-                              URL:{" "}
-                              <span style={{ wordBreak: "break-all" }}>
-                                {u.verificationDocFrontUrl}
-                              </span>
-                            </div>
-                          </>
-                        ) : (
-                          <div style={{ color: "#6b7280" }}>No front image uploaded.</div>
-                        )}
-                      </div>
-
-                      {/* Back */}
-                      <div style={{ border: "1px solid #f3f4f6", borderRadius: 14, padding: 12 }}>
-                        <div style={{ fontWeight: 900, marginBottom: 8 }}>Back (optional)</div>
-                        {u.verificationDocBackUrl ? (
-                          <>
-                            <img
-                              src={u.verificationDocBackUrl}
-                              alt="Verification document back"
-                              style={{
-                                width: "100%",
-                                borderRadius: 12,
-                                border: "1px solid #e5e7eb",
-                              }}
-                            />
-                            <div style={{ marginTop: 8, fontSize: 12, color: "#6b7280" }}>
-                              URL:{" "}
-                              <span style={{ wordBreak: "break-all" }}>
-                                {u.verificationDocBackUrl}
-                              </span>
-                            </div>
-                          </>
-                        ) : (
-                          <div style={{ color: "#6b7280" }}>No back image uploaded.</div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: 10, fontSize: 12, color: "#9ca3af" }}>
-                      If images don’t display, the URLs are not reachable by the browser (must be public URL or served from your app).
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
-
-      {/* small responsive fallback */}
-      <style jsx>{`
-        @media (max-width: 900px) {
-          div[style*="grid-template-columns: 1fr 360px"] {
-            grid-template-columns: 1fr !important;
-          }
-          div[style*="grid-template-columns: 1fr 1fr"] {
-            grid-template-columns: 1fr !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }

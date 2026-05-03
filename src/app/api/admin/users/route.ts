@@ -11,24 +11,46 @@ import { authOptions } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return Response.json({ error: "Not logged in." }, { status: 401 });
     }
-
     const admin = await prisma.user.findUnique({
       where: { email: session.user.email.toLowerCase() },
       select: { id: true, role: true },
     });
-
     if (!admin || admin.role !== "ADMIN") {
       return Response.json({ error: "Admin only." }, { status: 403 });
     }
 
+    const url = new URL(req.url);
+    const page = Math.max(1, parseInt(url.searchParams.get("page") ?? "1"));
+    const limit = Math.min(50, Math.max(1, parseInt(url.searchParams.get("limit") ?? "20")));
+    const skip = (page - 1) * limit;
+    const search = url.searchParams.get("search")?.trim().toLowerCase() ?? "";
+    const statusFilter = url.searchParams.get("status") ?? "ALL";
+
+    const where: any = {
+      role: "USER",
+      ...(search ? {
+        OR: [
+          { name: { contains: search, mode: "insensitive" } },
+          { email: { contains: search, mode: "insensitive" } },
+          { identificationNo: { contains: search, mode: "insensitive" } },
+        ],
+      } : {}),
+      ...(statusFilter !== "ALL" ? { verificationStatus: statusFilter } : {}),
+    };
+
+    const total = await prisma.user.count({ where });
+
     const users = await prisma.user.findMany({
+      where,
       orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
       select: {
         id: true,
         name: true,
@@ -41,16 +63,19 @@ export async function GET() {
         lastConfirmedAt: true,
         missedConfirmations: true,
         createdAt: true,
-        _count: {
-          select: {
-            collections: true,
-          },
-        },
+        _count: { select: { collections: true } },
       },
     });
 
-    return Response.json({ users });
-
+    return Response.json({
+      users,
+      pagination: {
+        page, limit, total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1,
+      },
+    });
   } catch (err) {
     console.error("GET /api/admin/users error:", err);
     return Response.json({ error: "Server error." }, { status: 500 });
