@@ -1,365 +1,245 @@
-/**
- * src/app/admin/receivers/page.tsx
- *
- * Purpose:
- * - Admin views all receivers
- * - See delivery status, claim status
- * - Generate claim codes directly from UI
- * - Filter by claimed/unclaimed/failed delivery
- */
-
 "use client";
-
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import TimeBridgeLoading from "@/components/TimeBridgeLoading";
 
-type DeliveryAttempt = {
-  channel: string;
-  status: string;
-  attemptedAt: string;
-};
-
 type Collection = {
-  id: string;
-  title: string;
-  totalItems: number;
-  releasedItems: number;
+  id: string; title: string;
+  totalItems: number; releasedItems: number;
   latestReleasedAt: string | null;
 };
 
 type Receiver = {
-  id: string;
-  fullName: string;
-  identificationNo: string;
-  email: string | null;
-  phone: string | null;
-  address: string;
-  receiverType: string;
-  isClaimed: boolean;
+  id: string; fullName: string; identificationNo: string;
+  email: string | null; phone: string | null; address: string;
+  receiverType: string; isClaimed: boolean;
   linkedUser: { name: string; email: string } | null;
-  guardianName: string | null;
-  guardianEmail: string | null;
-  senderName: string | null;
-  senderEmail: string | null;
-  createdAt: string;
-  collections: Collection[];
-  lastDeliveryAttempt: DeliveryAttempt | null;
+  guardianName: string | null; guardianEmail: string | null;
+  senderName: string | null; senderEmail: string | null;
+  createdAt: string; collections: Collection[];
+  lastDeliveryAttempt: { channel: string; status: string; attemptedAt: string } | null;
   hasActiveInvite: boolean;
+};
+
+const s = {
+  page: "#1C1814", card: "#2C2416", border: "#3D3020",
+  text: "#F0E8D8", muted: "#9B8060", dim: "#6B5840", gold: "#B8965A",
 };
 
 export default function AdminReceiversPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-
   const [receivers, setReceivers] = useState<Receiver[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<"ALL" | "UNCLAIMED" | "CLAIMED" | "FAILED">("ALL");
-
-  // Claim code generation
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [generatingCode, setGeneratingCode] = useState<string | null>(null);
   const [generatedCodes, setGeneratedCodes] = useState<Record<string, string>>({});
   const [codeError, setCodeError] = useState("");
 
   const role = (session?.user as any)?.role;
 
+  useEffect(() => { if (status === "unauthenticated") router.push("/login"); }, [status, router]);
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/login");
-  }, [status, router]);
+    if (status === "authenticated" && role && role !== "ADMIN") router.replace("/dashboard");
+  }, [status, role, router]);
 
-  useEffect(() => {
-    if (status === "authenticated") {
-      if (role && role !== "ADMIN") router.replace("/dashboard");
-      else loadReceivers();
-    }
-  }, [status, role]);
-
-  async function loadReceivers() {
-    setLoading(true);
-    setError("");
+  const loadReceivers = useCallback(async () => {
+    setLoading(true); setError("");
     try {
       const res = await fetch("/api/admin/receivers");
       const json = await res.json();
-      if (!res.ok) {
-        setError(json?.error ?? "Failed to load receivers.");
-        return;
-      }
+      if (!res.ok) { setError(json?.error ?? "Failed."); return; }
       setReceivers(json.receivers ?? []);
-    } catch {
-      setError("Network error.");
-    } finally {
-      setLoading(false);
-    }
-  }
+    } catch { setError("Network error."); } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { if (status === "authenticated" && role === "ADMIN") loadReceivers(); }, [status, role, loadReceivers]);
 
   async function generateClaimCode(receiverId: string) {
-    setCodeError("");
-    setGeneratingCode(receiverId);
+    setCodeError(""); setGeneratingCode(receiverId);
     try {
       const res = await fetch("/api/admin/claim-codes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ receiverId }),
       });
       const json = await res.json();
-      if (!res.ok) {
-        setCodeError(json?.error ?? "Failed to generate claim code.");
-        return;
-      }
-      setGeneratedCodes((prev) => ({ ...prev, [receiverId]: json.claimCode }));
-    } catch {
-      setCodeError("Network error.");
-    } finally {
-      setGeneratingCode(null);
-    }
+      if (!res.ok) { setCodeError(json?.error ?? "Failed."); return; }
+      setGeneratedCodes((p) => ({ ...p, [receiverId]: json.claimCode }));
+    } catch { setCodeError("Network error."); } finally { setGeneratingCode(null); }
   }
 
   const filtered = receivers.filter((r) => {
-    if (filter === "UNCLAIMED") return !r.isClaimed && r.collections.some((c) => c.releasedItems > 0);
-    if (filter === "CLAIMED") return r.isClaimed;
-    if (filter === "FAILED") return r.lastDeliveryAttempt?.status === "FAILED";
-    return true;
+    const hasReleased = r.collections.some((c) => c.releasedItems > 0);
+    const matchFilter =
+      filter === "UNCLAIMED" ? !r.isClaimed && hasReleased :
+      filter === "CLAIMED" ? r.isClaimed :
+      filter === "FAILED" ? r.lastDeliveryAttempt?.status === "FAILED" : true;
+    const q = search.toLowerCase();
+    const matchSearch = !q || r.fullName.toLowerCase().includes(q) ||
+      r.identificationNo.toLowerCase().includes(q) ||
+      (r.email ?? "").toLowerCase().includes(q) ||
+      (r.senderName ?? "").toLowerCase().includes(q);
+    return matchFilter && matchSearch;
   });
 
-  if (status === "loading" || loading) return <TimeBridgeLoading message="Loading receivers..." />;
+  const counts = {
+    unclaimed: receivers.filter((r) => !r.isClaimed && r.collections.some((c) => c.releasedItems > 0)).length,
+    claimed: receivers.filter((r) => r.isClaimed).length,
+    failed: receivers.filter((r) => r.lastDeliveryAttempt?.status === "FAILED").length,
+  };
+
+  if (status === "loading") return <TimeBridgeLoading message="Loading receivers..." />;
 
   return (
-    <div style={{ padding: 20, maxWidth: 1000, margin: "0 auto" }}>
+    <div style={{ minHeight: "100vh", background: s.page, padding: "24px 20px 48px", fontFamily: "var(--font-body)" }}>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
 
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 900, margin: 0 }}>Receiver Management</h1>
-          <div style={{ color: "#6b7280", fontSize: 13, marginTop: 4 }}>
-            {receivers.length} total receivers
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${s.border}` }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.16em", color: s.gold, marginBottom: 4 }}>RECEIVER MANAGEMENT</div>
+            <div style={{ fontSize: 13, color: s.muted }}>{receivers.length} total · {counts.unclaimed} awaiting claim · {counts.claimed} claimed</div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => router.push("/admin")} style={{ background: "transparent", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontFamily: "var(--font-body)", fontWeight: 700 }}>← Admin home</button>
+            <button onClick={loadReceivers} style={{ background: "transparent", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontFamily: "var(--font-body)", fontWeight: 700 }}>↻ Refresh</button>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => router.push("/admin")}>Back to admin</button>
-          <button onClick={loadReceivers}>Refresh</button>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && setSearch(searchInput)}
+            placeholder="Search by name, NRIC, email or sender..."
+            style={{ flex: 1, background: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "10px 14px", color: s.text, fontSize: 13, fontFamily: "var(--font-body)", outline: "none" }}
+          />
+          <button onClick={() => setSearch(searchInput)} style={{ background: "rgba(184,150,90,0.15)", border: `1px solid ${s.gold}`, color: s.gold, borderRadius: 8, padding: "10px 18px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "var(--font-body)" }}>Search</button>
         </div>
-      </div>
 
-      {/* Filter tabs */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        {(["ALL", "UNCLAIMED", "CLAIMED", "FAILED"] as const).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            style={{
-              background: filter === f ? "#1D9E75" : "white",
-              color: filter === f ? "white" : "#374151",
-              border: `1px solid ${filter === f ? "#1D9E75" : "#e5e7eb"}`,
-              borderRadius: 8,
-              padding: "6px 14px",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
-            {f === "ALL" ? `All (${receivers.length})`
-              : f === "UNCLAIMED" ? `Unclaimed (${receivers.filter(r => !r.isClaimed && r.collections.some(c => c.releasedItems > 0)).length})`
-              : f === "CLAIMED" ? `Claimed (${receivers.filter(r => r.isClaimed).length})`
-              : `Failed Delivery (${receivers.filter(r => r.lastDeliveryAttempt?.status === "FAILED").length})`}
-          </button>
-        ))}
-      </div>
-
-      {error && (
-        <div style={{
-          padding: "10px 14px",
-          background: "#fef2f2",
-          border: "1px solid #fecaca",
-          borderRadius: 8,
-          color: "#991b1b",
-          fontSize: 13,
-          marginBottom: 16,
-        }}>
-          {error}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+          {([
+            { key: "ALL", label: `All (${receivers.length})` },
+            { key: "UNCLAIMED", label: `Awaiting claim (${counts.unclaimed})` },
+            { key: "CLAIMED", label: `Claimed (${counts.claimed})` },
+            { key: "FAILED", label: `Failed delivery (${counts.failed})` },
+          ] as const).map((f) => (
+            <button key={f.key} onClick={() => setFilter(f.key)} style={{
+              fontSize: 11, fontWeight: 700, padding: "5px 14px", borderRadius: 20, cursor: "pointer",
+              background: filter === f.key ? "rgba(184,150,90,0.15)" : "transparent",
+              border: `1px solid ${filter === f.key ? s.gold : s.border}`,
+              color: filter === f.key ? s.gold : s.muted, fontFamily: "var(--font-body)",
+            }}>{f.label}</button>
+          ))}
         </div>
-      )}
 
-      {codeError && (
-        <div style={{
-          padding: "10px 14px",
-          background: "#fef2f2",
-          border: "1px solid #fecaca",
-          borderRadius: 8,
-          color: "#991b1b",
-          fontSize: 13,
-          marginBottom: 16,
-        }}>
-          {codeError}
-        </div>
-      )}
+        {error && <div style={{ background: "rgba(226,75,74,0.1)", border: "1px solid rgba(226,75,74,0.3)", borderRadius: 8, padding: "10px 14px", color: "#F09595", fontSize: 13, marginBottom: 16 }}>{error}</div>}
+        {codeError && <div style={{ background: "rgba(226,75,74,0.1)", border: "1px solid rgba(226,75,74,0.3)", borderRadius: 8, padding: "10px 14px", color: "#F09595", fontSize: 13, marginBottom: 16 }}>{codeError}</div>}
 
-      {filtered.length === 0 && (
-        <div style={{ color: "#6b7280", padding: 20, textAlign: "center" }}>
-          No receivers found for this filter.
-        </div>
-      )}
+        {loading ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {[0,1,2].map((i) => <div key={i} style={{ height: 80, borderRadius: 12, background: s.card, opacity: 0.5 }} />)}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "48px 0", color: s.muted }}>
+            <div style={{ fontSize: 15, fontFamily: "var(--font-display)", color: s.text }}>No receivers found</div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {filtered.map((r) => {
+              const hasReleased = r.collections.some((c) => c.releasedItems > 0);
+              const isExpanded = expandedId === r.id;
+              const generatedCode = generatedCodes[r.id];
+              const claimStyle = r.isClaimed
+                ? { bg: "rgba(29,158,117,0.15)", text: "#5DCAA5", border: "rgba(29,158,117,0.3)" }
+                : hasReleased
+                ? { bg: "rgba(250,199,117,0.15)", text: "#FAC775", border: "rgba(250,199,117,0.3)" }
+                : { bg: "rgba(107,88,64,0.2)", text: s.muted, border: s.border };
 
-      <div style={{ display: "grid", gap: 12 }}>
-        {filtered.map((receiver) => {
-          const hasReleased = receiver.collections.some((c) => c.releasedItems > 0);
-          const generatedCode = generatedCodes[receiver.id];
-
-          return (
-            <div key={receiver.id} style={{
-              border: `1px solid ${!receiver.isClaimed && hasReleased ? "#fde68a" : "#e5e7eb"}`,
-              borderRadius: 14,
-              padding: 16,
-              background: !receiver.isClaimed && hasReleased ? "#fffbeb" : "white",
-            }}>
-              {/* Top row */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-                <div>
-                  <div style={{ fontWeight: 900, fontSize: 15 }}>
-                    {receiver.fullName}
-                    <span style={{
-                      marginLeft: 8,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      padding: "2px 8px",
-                      borderRadius: 999,
-                      background: receiver.isClaimed ? "#dcfce7" : hasReleased ? "#fef3c7" : "#f3f4f6",
-                      color: receiver.isClaimed ? "#166534" : hasReleased ? "#92400e" : "#6b7280",
-                    }}>
-                      {receiver.isClaimed ? "✓ Claimed" : hasReleased ? "Awaiting claim" : "No release yet"}
-                    </span>
-                    <span style={{
-                      marginLeft: 6,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      padding: "2px 8px",
-                      borderRadius: 999,
-                      background: "#f3f4f6",
-                      color: "#6b7280",
-                    }}>
-                      {receiver.receiverType}
-                    </span>
+              return (
+                <div key={r.id} style={{ background: s.card, border: `1px solid ${isExpanded ? s.gold : s.border}`, borderRadius: 14, overflow: "hidden", transition: "border-color 200ms" }}>
+                  <div onClick={() => setExpandedId(isExpanded ? null : r.id)} style={{ display: "flex", alignItems: "center", gap: 12, padding: 16, cursor: "pointer" }}>
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(184,150,90,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: s.gold, flexShrink: 0 }}>
+                      {r.fullName.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: s.text, marginBottom: 2 }}>{r.fullName}</div>
+                      <div style={{ fontSize: 12, color: s.muted }}>{r.identificationNo} · From: {r.senderName ?? "Unknown"}</div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: claimStyle.bg, color: claimStyle.text, border: `1px solid ${claimStyle.border}` }}>
+                        {r.isClaimed ? "Claimed" : hasReleased ? "Awaiting" : "No release"}
+                      </span>
+                      {r.lastDeliveryAttempt?.status === "FAILED" && (
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: "rgba(226,75,74,0.15)", color: "#F09595", border: "1px solid rgba(226,75,74,0.3)" }}>Failed</span>
+                      )}
+                      <svg style={{ transition: "transform 0.3s ease", transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)" }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={s.gold} strokeWidth="2" strokeLinecap="round"><polyline points="9,18 15,12 9,6"/></svg>
+                    </div>
                   </div>
-                  <div style={{ color: "#6b7280", fontSize: 13, marginTop: 4 }}>
-                    NRIC: {receiver.identificationNo} · {receiver.email ?? "No email"}
-                  </div>
-                  <div style={{ color: "#9ca3af", fontSize: 12, marginTop: 2 }}>
-                    Sender: {receiver.senderName ?? "Unknown"} ({receiver.senderEmail})
-                  </div>
-                </div>
 
-                {/* Delivery status badge */}
-                {receiver.lastDeliveryAttempt && (
-                  <div style={{
-                    fontSize: 11,
-                    fontWeight: 700,
-                    padding: "4px 10px",
-                    borderRadius: 8,
-                    background: receiver.lastDeliveryAttempt.status === "DELIVERED" || receiver.lastDeliveryAttempt.status === "SENT"
-                      ? "#dcfce7" : receiver.lastDeliveryAttempt.status === "FAILED"
-                      ? "#fef2f2" : "#f3f4f6",
-                    color: receiver.lastDeliveryAttempt.status === "DELIVERED" || receiver.lastDeliveryAttempt.status === "SENT"
-                      ? "#166534" : receiver.lastDeliveryAttempt.status === "FAILED"
-                      ? "#991b1b" : "#6b7280",
-                  }}>
-                    Last delivery: {receiver.lastDeliveryAttempt.channel} — {receiver.lastDeliveryAttempt.status}
-                  </div>
-                )}
-              </div>
+                  {isExpanded && (
+                    <div style={{ borderTop: `1px solid ${s.border}`, padding: 16 }}>
+                      <div style={{ background: "#1C1814", borderRadius: 10, padding: "4px 12px", marginBottom: 14 }}>
+                        {[
+                          { label: "Email", value: r.email || "Not provided" },
+                          { label: "Phone", value: r.phone || "Not provided" },
+                          { label: "Address", value: r.address },
+                          { label: "Type", value: r.receiverType },
+                          { label: "Sender", value: `${r.senderName} (${r.senderEmail})` },
+                          ...(r.guardianName ? [{ label: "Guardian", value: `${r.guardianName} · ${r.guardianEmail}` }] : []),
+                          ...(r.linkedUser ? [{ label: "Claimed by", value: `${r.linkedUser.name} (${r.linkedUser.email})` }] : []),
+                        ].map((row) => (
+                          <div key={row.label} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${s.border}`, fontSize: 12 }}>
+                            <span style={{ color: s.muted }}>{row.label}</span>
+                            <span style={{ color: s.text, fontWeight: 700, textAlign: "right", marginLeft: 12 }}>{row.value}</span>
+                          </div>
+                        ))}
+                      </div>
 
-              {/* Collections */}
-              {receiver.collections.length > 0 && (
-                <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
-                  {receiver.collections.map((col) => (
-                    <div key={col.id} style={{
-                      padding: "8px 12px",
-                      background: "#f9fafb",
-                      borderRadius: 8,
-                      fontSize: 13,
-                      color: "#374151",
-                    }}>
-                      <b>{col.title}</b> — {col.releasedItems}/{col.totalItems} released
-                      {col.latestReleasedAt && (
-                        <span style={{ color: "#9ca3af", marginLeft: 8 }}>
-                          Released: {new Date(col.latestReleasedAt).toLocaleDateString("en-SG")}
-                        </span>
+                      {r.collections.length > 0 && (
+                        <>
+                          <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.14em", color: s.gold, marginBottom: 8 }}>MEMORIES ({r.collections.length})</div>
+                          {r.collections.map((c) => (
+                            <div key={c.id} style={{ background: "#1C1814", border: `1px solid ${s.border}`, borderRadius: 8, padding: "8px 12px", marginBottom: 6, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <div>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: s.text }}>{c.title}</div>
+                                <div style={{ fontSize: 11, color: s.dim, marginTop: 2 }}>{c.releasedItems}/{c.totalItems} released{c.latestReleasedAt ? ` · ${new Date(c.latestReleasedAt).toLocaleDateString("en-SG")}` : ""}</div>
+                              </div>
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 20, background: c.releasedItems > 0 ? "rgba(29,158,117,0.15)" : "rgba(107,88,64,0.2)", color: c.releasedItems > 0 ? "#5DCAA5" : s.muted, border: `1px solid ${c.releasedItems > 0 ? "rgba(29,158,117,0.3)" : s.border}` }}>
+                                {c.releasedItems}/{c.totalItems}
+                              </span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+
+                      {!r.isClaimed && hasReleased && (
+                        <div style={{ marginTop: 14 }}>
+                          {generatedCode ? (
+                            <div style={{ background: "rgba(29,158,117,0.1)", border: "1px solid rgba(29,158,117,0.3)", borderRadius: 10, padding: 14 }}>
+                              <div style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.14em", color: "#5DCAA5", marginBottom: 8 }}>CLAIM CODE GENERATED</div>
+                              <div style={{ fontSize: 24, fontWeight: 900, letterSpacing: 4, color: "#5DCAA5", fontFamily: "monospace", marginBottom: 8 }}>{generatedCode}</div>
+                              <div style={{ fontSize: 11, color: s.dim, marginBottom: 10 }}>Valid for 90 days. Give this to the receiver during your visit.</div>
+                              <button onClick={() => navigator.clipboard.writeText(generatedCode)} style={{ background: "rgba(29,158,117,0.2)", border: "1px solid rgba(29,158,117,0.4)", color: "#5DCAA5", borderRadius: 6, padding: "6px 14px", fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "var(--font-body)" }}>Copy code</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => generateClaimCode(r.id)} disabled={generatingCode === r.id} style={{ background: "rgba(184,150,90,0.15)", border: `1px solid ${s.gold}`, color: s.gold, borderRadius: 8, padding: "8px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "var(--font-body)" }}>
+                              {generatingCode === r.id ? "Generating..." : "Generate claim code"}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Linked user */}
-              {receiver.isClaimed && receiver.linkedUser && (
-                <div style={{
-                  marginTop: 10,
-                  padding: "8px 12px",
-                  background: "#f0fdf4",
-                  border: "1px solid #bbf7d0",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  color: "#166534",
-                }}>
-                  Claimed by: <b>{receiver.linkedUser.name}</b> ({receiver.linkedUser.email})
-                </div>
-              )}
-
-              {/* Claim code section — only for unclaimed receivers with released memories */}
-              {!receiver.isClaimed && hasReleased && (
-                <div style={{ marginTop: 12 }}>
-                  {generatedCode ? (
-                    <div style={{
-                      padding: "10px 14px",
-                      background: "#f0fdf8",
-                      border: "1px solid #6ee7b7",
-                      borderRadius: 8,
-                    }}>
-                      <div style={{ fontWeight: 700, color: "#065f46", fontSize: 13 }}>
-                        Claim code generated
-                      </div>
-                      <div style={{
-                        fontSize: 22,
-                        fontWeight: 900,
-                        letterSpacing: 3,
-                        color: "#047857",
-                        marginTop: 4,
-                      }}>
-                        {generatedCode}
-                      </div>
-                      <div style={{ color: "#6b7280", fontSize: 11, marginTop: 4 }}>
-                        Valid for 90 days. Give this code to the receiver during your visit.
-                      </div>
-                      <button
-                        onClick={() => navigator.clipboard.writeText(generatedCode)}
-                        style={{ marginTop: 8, fontSize: 12 }}
-                      >
-                        Copy code
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => generateClaimCode(receiver.id)}
-                      disabled={generatingCode === receiver.id}
-                      style={{
-                        background: "#1D9E75",
-                        color: "white",
-                        border: "none",
-                        borderRadius: 8,
-                        padding: "8px 16px",
-                        cursor: "pointer",
-                        fontSize: 13,
-                        fontWeight: 500,
-                      }}
-                    >
-                      {generatingCode === receiver.id ? "Generating..." : "Generate claim code"}
-                    </button>
                   )}
                 </div>
-              )}
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

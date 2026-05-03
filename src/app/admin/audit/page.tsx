@@ -1,15 +1,5 @@
-/**
- * src/app/admin/audit/page.tsx
- *
- * Purpose:
- * - Admin views all audit log entries
- * - Filter by action type
- * - Paginated — 50 per page
- */
-
 "use client";
-
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import TimeBridgeLoading from "@/components/TimeBridgeLoading";
@@ -24,26 +14,24 @@ type AuditLog = {
   createdAt: string;
 };
 
-const ACTION_FILTERS = [
-  "ALL",
-  "MEMORY",
-  "GUARDIAN",
-  "RECEIVER",
-  "VERIFICATION",
-];
-
-const actionColor = (action: string) => {
-  if (action.includes("RECALL")) return { bg: "#fef2f2", text: "#991b1b", border: "#fecaca" };
-  if (action.includes("GUARDIAN")) return { bg: "#eff6ff", text: "#1e40af", border: "#bfdbfe" };
-  if (action.includes("VERIFICATION")) return { bg: "#f0fdf8", text: "#065f46", border: "#6ee7b7" };
-  if (action.includes("MEMORY")) return { bg: "#faf5ff", text: "#6b21a8", border: "#e9d5ff" };
-  return { bg: "#f9fafb", text: "#374151", border: "#e5e7eb" };
+const s = {
+  page: "#1C1814", card: "#2C2416", border: "#3D3020",
+  text: "#F0E8D8", muted: "#9B8060", dim: "#6B5840", gold: "#B8965A",
 };
+
+function actionStyle(action: string) {
+  if (action.includes("RECALL")) return { bg: "rgba(226,75,74,0.15)", text: "#F09595", border: "rgba(226,75,74,0.3)" };
+  if (action.includes("GUARDIAN")) return { bg: "rgba(55,138,221,0.15)", text: "#85B7EB", border: "rgba(55,138,221,0.3)" };
+  if (action.includes("VERIFICATION")) return { bg: "rgba(29,158,117,0.15)", text: "#5DCAA5", border: "rgba(29,158,117,0.3)" };
+  if (action.includes("MEMORY")) return { bg: "rgba(127,119,221,0.15)", text: "#AFA9EC", border: "rgba(127,119,221,0.3)" };
+  return { bg: "rgba(107,88,64,0.2)", text: s.muted, border: s.border };
+}
+
+const ACTION_FILTERS = ["ALL", "MEMORY", "GUARDIAN", "RECEIVER", "VERIFICATION"];
 
 export default function AdminAuditPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -51,219 +39,135 @@ export default function AdminAuditPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
 
   const role = (session?.user as any)?.role;
 
+  useEffect(() => { if (status === "unauthenticated") router.push("/login"); }, [status, router]);
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/login");
-  }, [status, router]);
+    if (status === "authenticated" && role && role !== "ADMIN") router.replace("/dashboard");
+  }, [status, role, router]);
 
-  useEffect(() => {
-    if (status === "authenticated") {
-      if (role && role !== "ADMIN") router.replace("/dashboard");
-      else loadLogs();
-    }
-  }, [status, role, filter, page]);
-
-  async function loadLogs() {
-    setLoading(true);
-    setError("");
+  const loadLogs = useCallback(async () => {
+    setLoading(true); setError("");
     try {
-      const res = await fetch(
-        `/api/admin/audit?action=${filter}&page=${page}`
-      );
+      const params = new URLSearchParams({ action: filter, page: String(page) });
+      if (search) params.set("search", search);
+      const res = await fetch(`/api/admin/audit?${params}`);
       const json = await res.json();
-      if (!res.ok) {
-        setError(json?.error ?? "Failed to load audit logs.");
-        return;
-      }
+      if (!res.ok) { setError(json?.error ?? "Failed."); return; }
       setLogs(json.logs ?? []);
       setTotalPages(json.totalPages ?? 1);
       setTotal(json.total ?? 0);
-    } catch {
-      setError("Network error.");
-    } finally {
-      setLoading(false);
-    }
-  }
+    } catch { setError("Network error."); } finally { setLoading(false); }
+  }, [filter, page, search]);
 
-  if (status === "loading" || loading) return <TimeBridgeLoading message="Loading audit log..." />;
+  useEffect(() => { if (status === "authenticated" && role === "ADMIN") loadLogs(); }, [status, role, loadLogs]);
+
+  function handleSearch() { setSearch(searchInput); setPage(1); }
+
+  if (status === "loading") return <TimeBridgeLoading message="Loading audit log..." />;
 
   return (
-    <div style={{ padding: 20, maxWidth: 1000, margin: "0 auto" }}>
+    <div style={{ minHeight: "100vh", background: s.page, padding: "24px 20px 48px", fontFamily: "var(--font-body)" }}>
+      <div style={{ maxWidth: 900, margin: "0 auto" }}>
 
-      {/* Header */}
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 20,
-      }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 900, margin: 0 }}>Audit Log</h1>
-          <div style={{ color: "#6b7280", fontSize: 13, marginTop: 4 }}>
-            {total} total entries
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, paddingBottom: 16, borderBottom: `1px solid ${s.border}` }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: "0.16em", color: s.gold, marginBottom: 4 }}>AUDIT LOG</div>
+            <div style={{ fontSize: 13, color: s.muted }}>{total} total entries</div>
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => router.push("/admin")} style={{ background: "transparent", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontFamily: "var(--font-body)", fontWeight: 700 }}>← Admin home</button>
+            <button onClick={loadLogs} style={{ background: "transparent", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 11, fontFamily: "var(--font-body)", fontWeight: 700 }}>↻ Refresh</button>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={() => router.push("/admin")}>Back to admin</button>
-          <button onClick={loadLogs}>Refresh</button>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            placeholder="Search by action, entity or performed by..."
+            style={{ flex: 1, background: s.card, border: `1px solid ${s.border}`, borderRadius: 8, padding: "10px 14px", color: s.text, fontSize: 13, fontFamily: "var(--font-body)", outline: "none" }}
+          />
+          <button onClick={handleSearch} style={{ background: "rgba(184,150,90,0.15)", border: `1px solid ${s.gold}`, color: s.gold, borderRadius: 8, padding: "10px 18px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "var(--font-body)" }}>Search</button>
         </div>
-      </div>
 
-      {/* Filter tabs */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-        {ACTION_FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => { setFilter(f); setPage(1); }}
-            style={{
-              background: filter === f ? "#1D9E75" : "white",
-              color: filter === f ? "white" : "#374151",
-              border: `1px solid ${filter === f ? "#1D9E75" : "#e5e7eb"}`,
-              borderRadius: 8,
-              padding: "6px 14px",
-              cursor: "pointer",
-              fontSize: 13,
-              fontWeight: 500,
-            }}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      {error && (
-        <div style={{
-          padding: "10px 14px",
-          background: "#fef2f2",
-          border: "1px solid #fecaca",
-          borderRadius: 8,
-          color: "#991b1b",
-          fontSize: 13,
-          marginBottom: 16,
-        }}>
-          {error}
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+          {ACTION_FILTERS.map((f) => (
+            <button key={f} onClick={() => { setFilter(f); setPage(1); }} style={{
+              fontSize: 11, fontWeight: 700, padding: "5px 14px", borderRadius: 20, cursor: "pointer",
+              background: filter === f ? "rgba(184,150,90,0.15)" : "transparent",
+              border: `1px solid ${filter === f ? s.gold : s.border}`,
+              color: filter === f ? s.gold : s.muted, fontFamily: "var(--font-body)",
+            }}>{f}</button>
+          ))}
         </div>
-      )}
 
-      {logs.length === 0 && (
-        <div style={{ color: "#6b7280", padding: 20, textAlign: "center" }}>
-          No audit log entries found.
-        </div>
-      )}
+        {error && <div style={{ background: "rgba(226,75,74,0.1)", border: "1px solid rgba(226,75,74,0.3)", borderRadius: 8, padding: "10px 14px", color: "#F09595", fontSize: 13, marginBottom: 16 }}>{error}</div>}
 
-      <div style={{ display: "grid", gap: 8 }}>
-        {logs.map((log) => {
-          const colors = actionColor(log.action);
-          return (
-            <div key={log.id} style={{
-              border: `1px solid ${colors.border}`,
-              borderRadius: 10,
-              padding: 14,
-              background: colors.bg,
-            }}>
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                flexWrap: "wrap",
-                gap: 8,
-              }}>
-                <div>
-                  {/* Action */}
-                  <div style={{
-                    fontWeight: 700,
-                    fontSize: 13,
-                    color: colors.text,
-                    fontFamily: "monospace",
-                  }}>
-                    {log.action}
-                  </div>
-
-                  {/* Entity */}
-                  <div style={{ color: "#6b7280", fontSize: 12, marginTop: 4 }}>
-                    {log.entity}
-                    {log.entityId && (
-                      <span style={{ color: "#9ca3af", marginLeft: 6 }}>
-                        #{log.entityId.slice(0, 8)}...
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Performed by */}
-                  {log.performedBy && (
-                    <div style={{ color: "#6b7280", fontSize: 12, marginTop: 2 }}>
-                      By: {log.performedBy.name} ({log.performedBy.email})
-                    </div>
-                  )}
-
-                  {/* Details */}
-                  {log.details && Object.keys(log.details).length > 0 && (
-                    <div style={{
-                      marginTop: 8,
-                      padding: "6px 10px",
-                      background: "white",
-                      borderRadius: 6,
-                      fontSize: 12,
-                      color: "#374151",
-                      fontFamily: "monospace",
-                      lineHeight: 1.6,
-                    }}>
-                      {Object.entries(log.details).map(([key, value]) => (
-                        <div key={key}>
-                          <span style={{ color: "#9ca3af" }}>{key}:</span>{" "}
-                          {typeof value === "object"
-                            ? JSON.stringify(value)
-                            : String(value)}
+        {loading ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {[0,1,2,3].map((i) => <div key={i} style={{ height: 60, borderRadius: 10, background: s.card, opacity: 0.5 }} />)}
+          </div>
+        ) : logs.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "48px 0", color: s.muted }}>
+            <div style={{ fontSize: 15, fontFamily: "var(--font-display)", color: s.text }}>No audit entries found</div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {logs.map((log) => {
+              const as = actionStyle(log.action);
+              return (
+                <div key={log.id} style={{ background: s.card, border: `1px solid ${s.border}`, borderRadius: 10, padding: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 20, background: as.bg, color: as.text, border: `1px solid ${as.border}`, fontFamily: "monospace" }}>
+                          {log.action}
+                        </span>
+                        <span style={{ fontSize: 11, color: s.dim }}>
+                          {log.entity}{log.entityId && ` #${log.entityId.slice(0, 8)}...`}
+                        </span>
+                      </div>
+                      {log.performedBy && (
+                        <div style={{ fontSize: 12, color: s.muted, marginBottom: 6 }}>
+                          By: {log.performedBy.name} · {log.performedBy.email}
                         </div>
-                      ))}
+                      )}
+                      {log.details && Object.keys(log.details).length > 0 && (
+                        <div style={{ background: "#1C1814", borderRadius: 6, padding: "6px 10px", fontSize: 11, color: s.dim, fontFamily: "monospace", lineHeight: 1.7 }}>
+                          {Object.entries(log.details).map(([key, value]) => (
+                            <div key={key}>
+                              <span style={{ color: s.muted }}>{key}:</span>{" "}
+                              {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
+                    <div style={{ fontSize: 11, color: s.dim, whiteSpace: "nowrap", flexShrink: 0 }}>
+                      {new Date(log.createdAt).toLocaleString("en-SG", { timeZone: "Asia/Singapore" })} SGT
+                    </div>
+                  </div>
                 </div>
+              );
+            })}
+          </div>
+        )}
 
-                {/* Timestamp */}
-                <div style={{
-                  fontSize: 11,
-                  color: "#9ca3af",
-                  whiteSpace: "nowrap",
-                }}>
-                  {new Date(log.createdAt).toLocaleString("en-SG", {
-                    timeZone: "Asia/Singapore",
-                  })} SGT
-                </div>
-              </div>
+        {totalPages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 24, paddingTop: 16, borderTop: `1px solid ${s.border}`, flexWrap: "wrap", gap: 12 }}>
+            <span style={{ fontSize: 12, color: s.dim }}>Page {page} of {totalPages} · {total} entries</span>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => setPage((p) => p - 1)} disabled={page === 1} style={{ background: "transparent", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "6px 14px", cursor: page === 1 ? "not-allowed" : "pointer", fontSize: 11, fontFamily: "var(--font-body)", opacity: page === 1 ? 0.4 : 1 }}>← Prev</button>
+              <button onClick={() => setPage((p) => p + 1)} disabled={page === totalPages} style={{ background: "transparent", border: `1px solid ${s.border}`, color: s.muted, borderRadius: 6, padding: "6px 14px", cursor: page === totalPages ? "not-allowed" : "pointer", fontSize: 11, fontFamily: "var(--font-body)", opacity: page === totalPages ? 0.4 : 1 }}>Next →</button>
             </div>
-          );
-        })}
+          </div>
+        )}
       </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          gap: 12,
-          marginTop: 24,
-        }}>
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-          >
-            Previous
-          </button>
-          <span style={{ color: "#6b7280", fontSize: 13 }}>
-            Page {page} of {totalPages}
-          </span>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-          >
-            Next
-          </button>
-        </div>
-      )}
     </div>
   );
 }
