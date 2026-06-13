@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "988942190998-kbrcgan2asv60vcu5oillabh5nfsp1lf.apps.googleusercontent.com",
+          "client_id": "988942190998-llrkrn70ovpa39e8hhte6lsn1plsct5i.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "sg.timebridge.app",
-            "certificate_hash": "55d07457cd8bd71670b38a8120afdfdb2e1a47c3"
+            "certificate_hash": "cd51ed43f88e12124a5697b655395a82bc806362"
           }
         },
         {

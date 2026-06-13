@@ -20,7 +20,8 @@ import { prisma } from "@/lib/prisma";
 import { deleteFromB2ByKey } from "@/lib/b2Storage";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { createOrReuseReceiverInvite, sendInviteDelivery } from "@/lib/invites";
+import { createOrReuseReceiverInvite } from "@/lib/invites";
+import { deliverMemoryNotification } from "@/lib/delivery-queue";
 import type { AttachmentType } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -104,6 +105,8 @@ export async function POST(req: Request) {
         phoneNumber: true,
         address: true,
         verificationStatus: true,
+        trustedContactName: true,
+        trustedContactEmail: true,
       },
     });
 
@@ -228,21 +231,32 @@ export async function POST(req: Request) {
       const { invite } = await createOrReuseReceiverInvite(receiver.id);
 
       if (invite) {
-        await sendInviteDelivery(
-          {
+        await deliverMemoryNotification({
+          receiver: {
+            id: receiver.id,
             fullName: receiver.fullName,
             email: receiver.email,
             phone: receiver.phone,
             address: receiver.address,
-            identificationNo: receiver.identificationNo ?? undefined,
+            identificationNo: receiver.identificationNo,
+            receiverType: receiver.receiverType,
+            guardianName: receiver.guardianName,
+            guardianEmail: receiver.guardianEmail,
+            guardianPhone: receiver.guardianPhone,
+            guardianAddress: receiver.guardianAddress,
           },
-          me.name ?? "Someone who cares",
-          invite.token,
+          sender: {
+            id: me.id,
+            name: me.name ?? "Someone who cares",
+            trustedContactName: me.trustedContactName,
+            trustedContactEmail: me.trustedContactEmail,
+          },
+          inviteToken: invite.token,
+          collectionId: collection.id,
           collectionTitle,
-          1,
-          collection.id
-        ).catch((err) =>
-          console.error("[release-now] sendInviteDelivery failed:", err)
+          memoryCount: 1,
+        }).catch((err) =>
+          console.error("[release-now] deliverMemoryNotification failed:", err)
         );
       }
     }
